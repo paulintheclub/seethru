@@ -5,14 +5,12 @@ public enum HotKeyAction: UInt32, CaseIterable, Sendable {
     case moreOpaque = 1
     case moreTransparent
     case reset
-    case peek
 
     public var title: String {
         switch self {
         case .moreOpaque: "More opaque (frontmost window)"
         case .moreTransparent: "More transparent (frontmost window)"
         case .reset: "Reset frontmost window"
-        case .peek: "Peek: toggle all managed windows to 20%"
         }
     }
 }
@@ -30,7 +28,6 @@ public struct HotKeyBinding: Equatable, Sendable {
             HotKeyBinding(action: .moreOpaque, keyCode: UInt32(kVK_UpArrow), modifiers: mods, display: "⌃⌥⌘↑"),
             HotKeyBinding(action: .moreTransparent, keyCode: UInt32(kVK_DownArrow), modifiers: mods, display: "⌃⌥⌘↓"),
             HotKeyBinding(action: .reset, keyCode: UInt32(kVK_ANSI_0), modifiers: mods, display: "⌃⌥⌘0"),
-            HotKeyBinding(action: .peek, keyCode: UInt32(kVK_ANSI_P), modifiers: mods, display: "⌃⌥⌘P"),
         ]
     }()
 }

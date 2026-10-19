@@ -67,18 +67,6 @@ private func settle() async { try? await Task.sleep(nanoseconds: 60_000_000) }
         #expect(backend.applied.isEmpty)
     }
 
-    @Test func peekCapsManagedWindowsAndRestoresTheirValues() async {
-        let ws = FakeWindows(); ws.list = [win(1), win(2)]
-        let backend = FakeBackend()
-        let m = makeModel(windows: ws, backend: backend)
-        m.setOpacity(ws.list[0], 0.7); m.setOpacity(ws.list[1], 0.1); await settle()
-        m.togglePeek(); await settle()
-        #expect(backend.applied[ws.list[0].id] == 0.2)
-        #expect(backend.applied[ws.list[1].id] == 0.1)
-        m.togglePeek(); await settle()
-        #expect(backend.applied[ws.list[0].id] == 0.7)
-    }
-
     @Test func rulesApplyToNewWindowsOnRefresh() async {
         let ws = FakeWindows()
         let backend = FakeBackend()

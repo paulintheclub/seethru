@@ -10,19 +10,16 @@ per window, global hotkeys, and per-app memory. Everything runs on your Mac: no 
 
 ## What it does
 
-- **Peek**: one button (or the hotkey) drops every transparent window to 20% so you can look at what is behind them, and brings your values back on the second press.
 - Menu bar list of apps and their windows with an opacity slider (10–100%) per window and per app, and **Reset all**.
-- Global hotkeys (no extra permission): more/less transparent for the frontmost window, reset, and **Peek**
-  (all managed windows drop to 20% until you toggle it off).
+- Global hotkeys (no extra permission): more/less transparent for the frontmost window, and reset.
 - "Remember for this app": new windows of that app open already transparent. "Never touch this app" exclude list.
-- Optional per app: always on top, click-through (needs Accessibility).
+- Per app: always on top and click-through.
 - Open at login.
 
 | Hotkey | Action |
 |---|---|
 | ⌃⌥⌘↓ / ⌃⌥⌘↑ | more transparent / more opaque (frontmost window) |
 | ⌃⌥⌘0 | reset frontmost window |
-| ⌃⌥⌘P | peek |
 
 ## How it works, honestly
 
@@ -35,8 +32,9 @@ click-through panels on top of it:
 2. a live copy of the window drawn at your opacity.
 
 The result is the window blended with what is behind it, while clicks, scrolling and typing still go to the real window.
-Only **Screen Recording** permission is needed. Click-through and always-on-top work differently: the real window is moved
-off-screen with the Accessibility API and the copy is shown instead, which also needs **Accessibility**.
+Seethru asks for **Screen Recording** and **Accessibility** on first launch and does nothing until both are granted, so
+nothing can half-work later. Click-through and always-on-top work differently: the real window is moved off-screen with the
+Accessibility API and only the copy is shown.
 
 Consequences you should know about:
 
@@ -52,7 +50,7 @@ Consequences you should know about:
 ## Install
 
 Download `Seethru-<version>.zip` from Releases, unzip, move to Applications. Releases are not notarized, so the first time:
-right-click → Open. Then grant Screen Recording in the welcome window (Accessibility only for click-through) and relaunch.
+right-click → Open. Then grant Screen Recording and Accessibility in the welcome window and relaunch.
 
 Build it yourself (Command Line Tools are enough, Xcode is not required):
 

@@ -17,23 +17,25 @@ struct OnboardingView: View {
             }
             PermissionRow(
                 title: "Screen Recording",
-                reason: "Required. Seethru draws a live, see-through copy of the window you choose. macOS calls that screen recording. Nothing is stored or sent.",
+                reason: "Seethru draws a live, see-through copy of the window you choose. macOS calls that screen recording. Nothing is stored or sent.",
                 granted: model.permissions.screenRecording
             ) { Permissions.request(.screenRecording) }
             PermissionRow(
-                title: "Accessibility (optional)",
-                reason: "Only for click-through and always-on-top: the original window is then moved out of sight and put back afterwards. Plain transparency does not need it.",
+                title: "Accessibility",
+                reason: "Lets Seethru move a window out of sight and back, which click-through and always-on-top need. Nothing is read or recorded with it.",
                 granted: model.permissions.accessibility
             ) { Permissions.request(.accessibility) }
 
-            Text("After you switch a permission on, macOS may ask you to quit and reopen Seethru before it takes effect.")
-                .font(.callout).foregroundStyle(.secondary)
+            Text("Seethru needs both to work. After you switch one on, macOS may ask you to quit and reopen Seethru; if a row stays unchecked, use Relaunch.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
             HStack {
+                Button("Quit Seethru") { NSApp.terminate(nil) }
                 Button("Relaunch Seethru") { relaunch() }
                 Spacer()
-                Button(model.permissions.allGranted ? "Done" : "Later") { dismiss() }
+                Button("Continue") { dismiss() }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!model.permissions.allGranted)
             }
         }
         .padding(24)

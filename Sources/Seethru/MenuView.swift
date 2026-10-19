@@ -12,10 +12,14 @@ struct MenuView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if !model.missingPermissions.isEmpty { permissionBanner }
-            if let error = model.lastError { errorBanner(error) }
-            Divider()
-            list
+            if model.missingPermissions.isEmpty {
+                if let error = model.lastError { errorBanner(error) }
+                Divider()
+                list
+            } else {
+                Divider()
+                permissionGate
+            }
             Divider()
             footer
         }
@@ -32,34 +36,25 @@ struct MenuView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Seethru").font(.headline)
-                Text(model.peek ? "Peek: transparent windows at 20%"
-                     : model.activeCount == 0 ? "Nothing transparent" : "\(model.activeCount) window\(model.activeCount == 1 ? "" : "s") transparent")
+                Text(model.activeCount == 0 ? "Nothing transparent" : "\(model.activeCount) window\(model.activeCount == 1 ? "" : "s") transparent")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Spacer()
-            Toggle(isOn: Binding(get: { model.peek }, set: { _ in model.togglePeek() })) {
-                Label("Peek", systemImage: model.peek ? "eye.fill" : "eye")
-            }
-            .toggleStyle(.button)
-            .disabled(model.activeCount == 0)
-            .help("Peek: temporarily drop every transparent window to 20% to see what is behind. Click again to bring your values back. (⌃⌥⌘P)")
-            .accessibilityLabel("Peek through all managed windows")
         }
         .padding(12)
     }
 
-    private var permissionBanner: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "lock.shield").foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Permissions needed: \(model.missingPermissions.map(\.rawValue).joined(separator: " and "))")
-                    .font(.caption)
-                Button("Set up…") { bringToFront(openWindow, WindowID.onboarding) }
-                    .controlSize(.small)
-            }
-            Spacer(minLength: 0)
+    /// Seethru does nothing until both permissions are granted, so nothing can half-work later.
+    private var permissionGate: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lock.shield").font(.largeTitle).foregroundStyle(.orange)
+            Text("Seethru needs two permissions")
+                .font(.headline)
+            Text("Missing: \(model.missingPermissions.map(\.rawValue).joined(separator: " and "))")
+                .font(.callout).foregroundStyle(.secondary)
+            Button("Set up…") { bringToFront(openWindow, WindowID.onboarding) }
+                .buttonStyle(.borderedProminent)
         }
-        .padding(.horizontal, 12).padding(.bottom, 10)
+        .frame(maxWidth: .infinity).padding(.vertical, 28)
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -190,12 +185,12 @@ struct AppRow: View {
                     set: { on in on ? model.remember(app: group) : model.forgetRule(bundleID: group.bundleID!) }))
             }
             if model.capabilities.contains(.alwaysOnTop) {
-                Toggle("Always on top (needs Accessibility)", isOn: Binding(
+                Toggle("Always on top", isOn: Binding(
                     get: { options.alwaysOnTop },
                     set: { model.setOptions(app: group, WindowOptions(alwaysOnTop: $0, clickThrough: options.clickThrough)) }))
             }
             if model.capabilities.contains(.clickThrough) {
-                Toggle("Click-through (needs Accessibility)", isOn: Binding(
+                Toggle("Click-through", isOn: Binding(
                     get: { options.clickThrough },
                     set: { model.setOptions(app: group, WindowOptions(alwaysOnTop: options.alwaysOnTop, clickThrough: $0)) }))
             }

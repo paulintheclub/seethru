@@ -6,10 +6,10 @@ import PrivateAPI
 /// Needs Screen Recording (capture) and Accessibility (moving the original).
 @MainActor
 public final class MirrorBackend: OpacityBackend {
-    /// Click-through and always-on-top need the original out of the way (parked off-screen, needs Accessibility).
-    /// Plain transparency needs only Screen Recording.
+    /// Both permissions are required up front. Plain transparency only uses Screen Recording; click-through and
+    /// always-on-top park the original off-screen, which uses Accessibility.
     public let capabilities: BackendCapabilities = [.alwaysOnTop, .clickThrough]
-    public let requiredPermissions: [PermissionKind] = [.screenRecording]
+    public let requiredPermissions: [PermissionKind] = [.screenRecording, .accessibility]
     public var onWindowLost: (@MainActor (WindowID, BackendError?) -> Void)?
 
     private let resolver: any AXWindowIDResolving

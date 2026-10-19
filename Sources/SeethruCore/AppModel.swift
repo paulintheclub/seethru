@@ -7,10 +7,9 @@ import Observation
 public final class AppModel {
     // MARK: observable state
     public private(set) var groups: [AppGroup] = []
-    /// Windows currently made see-through, with the value the user chose (before peek).
+    /// Windows currently made see-through, with the value the user chose.
     public private(set) var opacities: [WindowID: Double] = [:]
     public private(set) var options: [WindowID: WindowOptions] = [:]
-    public private(set) var peek = false
     public private(set) var permissions = PermissionStatus(accessibility: false, screenRecording: false)
     public private(set) var lastError: String?
     public private(set) var rules = RulesFile()
@@ -143,13 +142,7 @@ public final class AppModel {
         opacities.removeAll()
         options.removeAll()
         knownManaged.removeAll()
-        peek = false
         lastError = nil
-    }
-
-    public func togglePeek() {
-        peek.toggle()
-        for id in opacities.keys { if let w = info(for: id) { apply(w) } }
     }
 
     public func clearError() { lastError = nil }
@@ -194,8 +187,6 @@ public final class AppModel {
 
     public func handle(_ action: HotKeyAction) {
         switch action {
-        case .peek:
-            togglePeek()
         case .moreOpaque, .moreTransparent, .reset:
             snapshot = windows.snapshot()
             guard let target = frontmostWindow() else { return }
@@ -243,8 +234,7 @@ public final class AppModel {
     }
 
     private func apply(_ w: WindowInfo) {
-        guard let base = opacities[w.id] else { return }
-        let value = OpacityStepper.effective(base, peek: peek)
+        guard let value = opacities[w.id] else { return }
         let opts = options[w.id] ?? .none
         Task { @MainActor in
             do {

@@ -19,10 +19,4 @@ import Testing
         for _ in 0..<7 { v = OpacityStepper.step(v, .moreOpaque) }
         #expect(v == 1.0)
     }
-
-    @Test func peekCapsButNeverRaises() {
-        #expect(OpacityStepper.effective(0.8, peek: true) == 0.2)
-        #expect(OpacityStepper.effective(0.1, peek: true) == 0.1)
-        #expect(OpacityStepper.effective(0.8, peek: false) == 0.8)
-    }
 }

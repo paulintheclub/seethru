@@ -27,16 +27,13 @@ enum MenuBarImage {
 struct MenuBarLabel: View {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
-    @AppStorage("onboardingShown") private var onboardingShown = false
 
     var body: some View {
         Image(nsImage: MenuBarImage.make(active: model.activeCount > 0))
             .accessibilityLabel(model.activeCount > 0 ? "Seethru, \(model.activeCount) windows transparent" : "Seethru")
             .task {
                 if CommandLine.arguments.contains("--show-window") { bringToFront(openWindow, WindowID.main) }
-                guard !onboardingShown else { return }
-                onboardingShown = true
-                bringToFront(openWindow, WindowID.onboarding)
+                if !Permissions.current().allGranted { bringToFront(openWindow, WindowID.onboarding) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .showMainWindow)) { _ in
                 bringToFront(openWindow, WindowID.main)

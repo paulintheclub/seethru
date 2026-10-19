@@ -27,7 +27,7 @@ spikes/          standalone feasibility programs (see FEASIBILITY.md)
 | How | original stays put; above it two click-through panels: a backdrop (display capture without the window) and a live copy at alpha < 1 | copy in an overlay, original moved off-screen with Accessibility, the strip macOS leaves visible covered by a backdrop panel |
 | Result | alpha x window + (1 - alpha) x backdrop | same look |
 | Input | real: clicks, scroll and typing reach the real window | forwarded with `CGEvent.postToPid` (unreliable: Chrome ignores it), so only useful with click-through |
-| Permissions | Screen Recording | Screen Recording + Accessibility |
+| Permissions | both are required at first launch; the app is gated until granted | same |
 | If Seethru dies | nothing to restore | `hidden-windows.json` journal moves windows back on next launch |
 
 A direct SkyLight alpha backend was tried and removed: macOS ignores it for other apps' windows with SIP on (docs/FEASIBILITY.md).

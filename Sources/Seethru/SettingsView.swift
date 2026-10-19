@@ -39,12 +39,12 @@ private struct GeneralTab: View {
                 }
             }
             Section("How it works") {
-                Text("Seethru layers a live see-through copy over the window. Clicks, scrolling and typing still reach the real window. Only Screen Recording is needed; Accessibility is used only for click-through and always-on-top.")
+                Text("Seethru layers a live see-through copy over the window. Clicks, scrolling and typing still reach the real window.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Section("Permissions") {
                 LabeledContent("Screen Recording") { Text(model.permissions.screenRecording ? "Granted" : "Not granted") }
-                LabeledContent("Accessibility (optional)") { Text(model.permissions.accessibility ? "Granted" : "Not granted") }
+                LabeledContent("Accessibility") { Text(model.permissions.accessibility ? "Granted" : "Not granted") }
                 Button("Open permission setup…") { bringToFront(openWindow, WindowID.onboarding) }
             }
             if model.recoveredWindows > 0 {

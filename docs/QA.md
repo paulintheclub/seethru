@@ -22,7 +22,7 @@ returns it exactly where it was, **(e)** quitting Seethru while it is transparen
 - [ ] Liquid Glass windows on macOS 26
 - [ ] Sleep and wake with a transparent window
 - [ ] `kill -9` Seethru while a window is transparent, relaunch: the window comes back on screen
-- [ ] Hotkeys: more/less transparent, reset, peek; a clash with another app's shortcut shows a warning in Settings
+- [ ] Hotkeys: more/less transparent, reset; a clash with another app's shortcut shows a warning in Settings
 - [ ] Rules: "Remember for this app", open a new window of that app, it is already transparent; "Never touch this app"
 - [ ] Launch at login
 - [ ] VoiceOver: every control reachable with the keyboard and has a label
