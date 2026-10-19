@@ -21,4 +21,10 @@ enum WindowGeometry {
         let rows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
         return rows.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value }
     }
+
+    /// On-screen windows stacked above `number`, front to back. Much cheaper than the full list.
+    static func windowsAbove(_ number: UInt32) -> [UInt32] {
+        let rows = CGWindowListCopyWindowInfo([.optionOnScreenAboveWindow], CGWindowID(number)) as? [[String: Any]] ?? []
+        return rows.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value }
+    }
 }

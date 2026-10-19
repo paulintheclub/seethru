@@ -6,7 +6,6 @@ import PrivateAPI
 /// Needs Screen Recording (capture) and Accessibility (moving the original).
 @MainActor
 public final class MirrorBackend: OpacityBackend {
-    public let kind = BackendKind.mirror
     /// Click-through and always-on-top need the original out of the way (parked off-screen, needs Accessibility).
     /// Plain transparency needs only Screen Recording.
     public let capabilities: BackendCapabilities = [.alwaysOnTop, .clickThrough]

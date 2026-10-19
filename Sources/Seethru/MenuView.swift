@@ -32,16 +32,17 @@ struct MenuView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Seethru").font(.headline)
-                Text(model.activeCount == 0 ? "Nothing transparent" : "\(model.activeCount) window\(model.activeCount == 1 ? "" : "s") transparent")
+                Text(model.peek ? "Peek: transparent windows at 20%"
+                     : model.activeCount == 0 ? "Nothing transparent" : "\(model.activeCount) window\(model.activeCount == 1 ? "" : "s") transparent")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Toggle(isOn: Binding(get: { model.peek }, set: { _ in model.togglePeek() })) {
-                Label("Peek", systemImage: "eye")
+                Label("Peek", systemImage: model.peek ? "eye.fill" : "eye")
             }
             .toggleStyle(.button)
             .disabled(model.activeCount == 0)
-            .help("Temporarily make every managed window 20% (⌃⌥⌘P)")
+            .help("Peek: temporarily drop every transparent window to 20% to see what is behind. Click again to bring your values back. (⌃⌥⌘P)")
             .accessibilityLabel("Peek through all managed windows")
         }
         .padding(12)

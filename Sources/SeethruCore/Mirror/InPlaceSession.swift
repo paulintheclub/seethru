@@ -25,8 +25,11 @@ final class InPlaceSession: OverlaySession {
     private var ended = false
     private var timer: Timer?
     private var mouseMonitor: Any?
+    private var activationObserver: NSObjectProtocol?
     private var tick = 0
     private var rebuilding = false
+    private var syncing = false
+    private var syncAgain = false
 
     init(window: WindowInfo, alpha: Double) {
         self.window = window
@@ -67,12 +70,21 @@ final class InPlaceSession: OverlaySession {
         guard sink.frameCount > 0 else { stop(); throw BackendError.captureFailed("no frames received") }
         showGroup()
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+        // Common run-loop modes: the timer must keep running while a menu or slider is being tracked.
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.onTick() }
         }
-        // A click raises the original above our panels; fix the stacking right away instead of at the next tick.
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .leftMouseUp]) { [weak self] _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.restackIfNeeded() } }
+        t.tolerance = 0
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+        // A click makes the app raise the original above our panels. Re-stack immediately, and again a few times
+        // while the app finishes raising (the event reaches us before or at the same moment as the raise).
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .leftMouseUp, .otherMouseDown]) { [weak self] _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.restackBurst() } }
+        }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restackBurst() }
         }
     }
 
@@ -100,6 +112,8 @@ final class InPlaceSession: OverlaySession {
         timer?.invalidate()
         if let m = mouseMonitor { NSEvent.removeMonitor(m) }
         mouseMonitor = nil
+        if let o = activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
+        activationObserver = nil
         if let s = stream { Task { try? await s.stopCapture() } }
         stream = nil
         covers.forEach { $0.stop() }
@@ -129,20 +143,31 @@ final class InPlaceSession: OverlaySession {
             overlay.setFrame(ScreenGeometry.appKitFrame(fromCG: frame), display: false)
             overlayView.frame = NSRect(origin: .zero, size: frame.size)
             if let stream { Task { try? await stream.updateConfiguration(windowConfiguration()) } }
-            Task { await syncCovers() }
+            scheduleSync()
         }
-        if tick % 3 == 0 { restackIfNeeded() }
+        restackIfNeeded()
     }
 
-    /// Stack, front to back: overlay, covers, original, contiguous. Anything else means the original was raised.
+    /// Stack, front to back: overlay, backdrops, original, with nothing in between. Anything else means the original
+    /// was raised (or another window slipped in), so put our panels back directly above it.
     private func restackIfNeeded() {
         guard !ended, shown, let overlay else { return }
-        let order = WindowGeometry.zOrder()
-        guard let w = order.firstIndex(of: window.id.number), let o = order.firstIndex(of: UInt32(overlay.windowNumber)) else { return }
-        let coverIDs = covers.compactMap { order.firstIndex(of: UInt32($0.windowNumber)) }
-        if o + covers.count + 1 == w && coverIDs.count == covers.count && coverIDs.allSatisfy({ $0 > o && $0 < w }) { return }
+        let above = WindowGeometry.windowsAbove(window.id.number)
+        let ours = Set(covers.map { UInt32($0.windowNumber) })
+        let n = covers.count + 1
+        if above.count >= n, above[0] == UInt32(overlay.windowNumber), Set(above[1..<n]) == ours { return }
         covers.forEach { $0.order(above: Int(window.id.number)) }
         overlay.order(.above, relativeTo: covers.last?.windowNumber ?? Int(window.id.number))
+    }
+
+    /// Checks now and at the next few frames.
+    private func restackBurst() {
+        restackIfNeeded()
+        for ms in [4, 8, 16, 33, 66, 120] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(ms)) { [weak self] in
+                MainActor.assumeIsolated { self?.restackIfNeeded() }
+            }
+        }
     }
 
     // MARK: layers
@@ -157,6 +182,19 @@ final class InPlaceSession: OverlaySession {
         for rect in BackdropCover.visibleRects(origin: frame.origin, size: frame.size) {
             let c = BackdropCover(rect: rect, original: scWindow)
             do { try await c.start(); covers.append(c) } catch { c.stop() }
+        }
+    }
+
+    /// Coalesces backdrop updates while the window is being dragged or resized.
+    private func scheduleSync() {
+        if syncing { syncAgain = true; return }
+        syncing = true
+        Task { @MainActor in
+            repeat {
+                syncAgain = false
+                await syncCovers()
+            } while syncAgain && !ended
+            syncing = false
         }
     }
 

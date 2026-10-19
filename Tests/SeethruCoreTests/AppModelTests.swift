@@ -4,7 +4,6 @@ import Testing
 
 @MainActor
 final class FakeBackend: OpacityBackend {
-    let kind = BackendKind.mirror
     let capabilities: BackendCapabilities = [.alwaysOnTop, .clickThrough]
     let requiredPermissions: [PermissionKind] = []
     var onWindowLost: (@MainActor (WindowID, BackendError?) -> Void)?
@@ -32,8 +31,7 @@ private func makeModel(windows: FakeWindows, backend: FakeBackend, rules: RulesF
     let store = RulesStore(url: url)
     rules.rules.forEach(store.upsert)
     rules.excluded.forEach(store.exclude)
-    let suite = UserDefaults(suiteName: "seethru-tests-\(UUID().uuidString)")!
-    let m = AppModel(windows: windows, store: store, defaults: suite, makeBackend: { _ in backend })
+    let m = AppModel(windows: windows, store: store, backend: backend)
     return m
 }
 
@@ -96,7 +94,7 @@ private func settle() async { try? await Task.sleep(nanoseconds: 60_000_000) }
 
     @Test func backendFailureSurfacesAnErrorAndDropsTheWindow() async {
         let ws = FakeWindows(); ws.list = [win(1)]
-        let backend = FakeBackend(); backend.failWith = .refusedByWindowServer
+        let backend = FakeBackend(); backend.failWith = .captureFailed("test")
         let m = makeModel(windows: ws, backend: backend)
         m.setOpacity(ws.list[0], 0.5); await settle()
         #expect(m.lastError != nil)

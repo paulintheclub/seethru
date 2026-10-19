@@ -10,11 +10,12 @@ per window, global hotkeys, and per-app memory. Everything runs on your Mac: no 
 
 ## What it does
 
+- **Peek**: one button (or the hotkey) drops every transparent window to 20% so you can look at what is behind them, and brings your values back on the second press.
 - Menu bar list of apps and their windows with an opacity slider (10–100%) per window and per app, and **Reset all**.
 - Global hotkeys (no extra permission): more/less transparent for the frontmost window, reset, and **Peek**
   (all managed windows drop to 20% until you toggle it off).
 - "Remember for this app": new windows of that app open already transparent. "Never touch this app" exclude list.
-- Optional per app: always on top, click-through.
+- Optional per app: always on top, click-through (needs Accessibility).
 - Open at login.
 
 | Hotkey | Action |
@@ -43,7 +44,7 @@ Consequences you should know about:
   panels for a moment before Seethru puts them back (a brief flicker).
 - Some content (DRM video, secure fields) may not be captured. Full-screen windows are not supported.
 - Two transparent windows that overlap show each other opaque.
-- It relies on undocumented behaviour (`_AXUIElementGetWindow` for parked mode, SkyLight for the optional backend), so **a macOS
+- It relies on undocumented behaviour (`_AXUIElementGetWindow` for click-through / always-on-top), so **a macOS
   update can break it**. All of it is isolated in `Sources/PrivateAPI` and fails with a message, not a crash.
 - Not sandboxed (impossible with Accessibility), so it cannot be on the Mac App Store.
 - With a crowded menu bar macOS may hide the icon. Open Seethru again from Finder/Spotlight to get a regular window.

@@ -17,14 +17,6 @@ public final class AppModel {
     public private(set) var failedHotKeys: [HotKeyAction] = []
     public private(set) var recoveredWindows = 0
 
-    public var backendKind: BackendKind {
-        didSet {
-            guard oldValue != backendKind else { return }
-            defaults.set(backendKind.rawValue, forKey: Self.backendKey)
-            switchBackend()
-        }
-    }
-
     public var activeCount: Int { opacities.count }
     public var capabilities: BackendCapabilities { backend.capabilities }
     public var missingPermissions: [PermissionKind] { backend.requiredPermissions.filter { !permissions.isGranted($0) } }
@@ -32,37 +24,21 @@ public final class AppModel {
     // MARK: collaborators
     @ObservationIgnored private let windows: any WindowListing
     @ObservationIgnored private let store: RulesStore
-    @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private let makeBackend: @MainActor (BackendKind) -> any OpacityBackend
-    @ObservationIgnored private var backend: any OpacityBackend
+    @ObservationIgnored private let backend: any OpacityBackend
     @ObservationIgnored private var snapshot: [WindowInfo] = []
     @ObservationIgnored private var knownManaged: [WindowID: WindowInfo] = [:]
     @ObservationIgnored private var handled: Set<WindowID> = []
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
-    static let backendKey = "backend"
-
     public init(windows: any WindowListing = CGWindowService(),
                 store: RulesStore = RulesStore(),
-                defaults: UserDefaults = .standard,
-                makeBackend: @escaping @MainActor (BackendKind) -> any OpacityBackend = AppModel.defaultBackend) {
+                backend: any OpacityBackend = MirrorBackend()) {
         self.windows = windows
         self.store = store
-        self.defaults = defaults
-        self.makeBackend = makeBackend
-        let kind = defaults.string(forKey: Self.backendKey).flatMap(BackendKind.init(rawValue:)) ?? .mirror
-        self.backendKind = kind
-        self.backend = makeBackend(kind)
+        self.backend = backend
         self.rules = store.file
         wire(backend)
-    }
-
-    public static func defaultBackend(_ kind: BackendKind) -> any OpacityBackend {
-        switch kind {
-        case .mirror: MirrorBackend()
-        case .skyLight: SkyLightBackend()
-        }
     }
 
     // MARK: lifecycle
@@ -74,10 +50,12 @@ public final class AppModel {
         let failed = HotKeyCenter.shared.register { [weak self] in self?.handle($0) }
         failedHotKeys = failed
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
-        timer?.tolerance = 0.3
+        t.tolerance = 0.3
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
         let ws = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification,
                      NSWorkspace.didActivateApplicationNotification] {
@@ -293,19 +271,6 @@ public final class AppModel {
             self.forget(id)
             if let error { self.lastError = error.errorDescription }
         }
-    }
-
-    private func switchBackend() {
-        let previous = opacities
-        let prevOptions = options
-        let infos = previous.keys.compactMap { info(for: $0) }
-        backend.restoreAll()
-        backend = makeBackend(backendKind)
-        wire(backend)
-        lastError = nil
-        opacities = previous
-        options = prevOptions
-        infos.forEach(apply)
     }
 
     private func reapplyAfterWake() {

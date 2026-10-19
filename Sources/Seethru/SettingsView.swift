@@ -24,7 +24,6 @@ private struct GeneralTab: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        @Bindable var model = model
         Form {
             Section {
                 Toggle("Open Seethru at login", isOn: $launchAtLogin)
@@ -39,18 +38,13 @@ private struct GeneralTab: View {
                     Text("Approve Seethru under System Settings → General → Login Items.").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Section("How windows are made transparent") {
-                Picker("Method", selection: $model.backendKind) {
-                    ForEach(BackendKind.allCases) { Text($0.title).tag($0) }
-                }
-                Text(model.backendKind == .mirror
-                     ? "Layers a live see-through copy over the window; clicks still reach the real window. Works with System Integrity Protection on. Needs Screen Recording (Accessibility only for click-through)."
-                     : "Asks the window server to change the window's alpha directly. macOS ignores this for other apps' windows when SIP is on, so Seethru will report a failure. Kept for testing.")
+            Section("How it works") {
+                Text("Seethru layers a live see-through copy over the window. Clicks, scrolling and typing still reach the real window. Only Screen Recording is needed; Accessibility is used only for click-through and always-on-top.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Section("Permissions") {
                 LabeledContent("Screen Recording") { Text(model.permissions.screenRecording ? "Granted" : "Not granted") }
-                LabeledContent("Accessibility") { Text(model.permissions.accessibility ? "Granted" : "Not granted") }
+                LabeledContent("Accessibility (optional)") { Text(model.permissions.accessibility ? "Granted" : "Not granted") }
                 Button("Open permission setup…") { bringToFront(openWindow, WindowID.onboarding) }
             }
             if model.recoveredWindows > 0 {
