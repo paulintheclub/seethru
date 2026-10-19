@@ -44,7 +44,7 @@ private struct GeneralTab: View {
                     ForEach(BackendKind.allCases) { Text($0.title).tag($0) }
                 }
                 Text(model.backendKind == .mirror
-                     ? "Shows a live see-through copy of the window and parks the original off-screen. Works with System Integrity Protection on. Needs Screen Recording and Accessibility."
+                     ? "Layers a live see-through copy over the window; clicks still reach the real window. Works with System Integrity Protection on. Needs Screen Recording (Accessibility only for click-through)."
                      : "Asks the window server to change the window's alpha directly. macOS ignores this for other apps' windows when SIP is on, so Seethru will report a failure. Kept for testing.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }

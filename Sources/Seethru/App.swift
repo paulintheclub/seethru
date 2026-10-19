@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.start()
+        applyLaunchArguments()
         // Never leave a window transparent or parked off-screen when we are asked to stop.
         for sig in [SIGTERM, SIGINT, SIGHUP] {
             signal(sig, SIG_IGN)
@@ -56,6 +57,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             src.resume()
             signalSources.append(src)
+        }
+    }
+
+    /// Developer/QA hook: `Seethru --set-opacity "<app name>" 0.5` dims that app's windows shortly after launch.
+    private func applyLaunchArguments() {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--set-opacity"), args.count > i + 2, let value = Double(args[i + 2]) else { return }
+        let name = args[i + 1]
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            model.refresh()
+            if let group = model.groups.first(where: { $0.name == name }) { model.setOpacity(app: group, value) }
         }
     }
 

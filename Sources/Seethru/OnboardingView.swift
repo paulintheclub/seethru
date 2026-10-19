@@ -17,12 +17,12 @@ struct OnboardingView: View {
             }
             PermissionRow(
                 title: "Screen Recording",
-                reason: "Seethru draws a live, see-through copy of the window you choose. macOS calls that screen recording. No video is stored.",
+                reason: "Required. Seethru draws a live, see-through copy of the window you choose. macOS calls that screen recording. Nothing is stored or sent.",
                 granted: model.permissions.screenRecording
             ) { Permissions.request(.screenRecording) }
             PermissionRow(
-                title: "Accessibility",
-                reason: "To move the original window out of sight while its see-through copy is shown, and to put it back afterwards.",
+                title: "Accessibility (optional)",
+                reason: "Only for click-through and always-on-top: the original window is then moved out of sight and put back afterwards. Plain transparency does not need it.",
                 granted: model.permissions.accessibility
             ) { Permissions.request(.accessibility) }
 

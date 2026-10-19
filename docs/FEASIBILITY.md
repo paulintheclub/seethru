@@ -76,6 +76,13 @@ The app's `MirrorBackend` implements the full design (hide via AX with off-scree
 refuses to continue if macOS clamps the window, crash journal, mouse forwarding). It fails with a clear message
 instead of showing a double image if the original cannot be hidden.
 
+### Findings on the user's Mac (Chrome)
+
+- Parked mode: transparency and the strip cover worked, **clicks did not reach Chrome** (forwarded events are ignored).
+- Therefore the default became **in-place mode** (original stays put, backdrop panel + see-through copy, both click-through).
+  Verified with a test window: blend looks right, no double image. Real clicks through the panels are still to be confirmed
+  in Chrome.
+
 ## Decision gate
 
 - A fails (above). Mirror backend (B) is the primary backend in the app; capture and overlay are proven, hiding the original is still to be confirmed on the user's Mac.

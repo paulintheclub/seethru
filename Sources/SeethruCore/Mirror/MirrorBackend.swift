@@ -7,13 +7,15 @@ import PrivateAPI
 @MainActor
 public final class MirrorBackend: OpacityBackend {
     public let kind = BackendKind.mirror
+    /// Click-through and always-on-top need the original out of the way (parked off-screen, needs Accessibility).
+    /// Plain transparency needs only Screen Recording.
     public let capabilities: BackendCapabilities = [.alwaysOnTop, .clickThrough]
-    public let requiredPermissions: [PermissionKind] = [.accessibility, .screenRecording]
+    public let requiredPermissions: [PermissionKind] = [.screenRecording]
     public var onWindowLost: (@MainActor (WindowID, BackendError?) -> Void)?
 
     private let resolver: any AXWindowIDResolving
     private let journal: HiddenWindowJournal
-    private var sessions: [WindowID: MirrorSession] = [:]
+    private var sessions: [WindowID: any OverlaySession] = [:]
     private var starting: [WindowID: (value: Double, options: WindowOptions)] = [:]
 
     public init(resolver: any AXWindowIDResolving = DynamicAXWindowIDResolver(), journal: HiddenWindowJournal = HiddenWindowJournal()) {
@@ -26,18 +28,25 @@ public final class MirrorBackend: OpacityBackend {
             restore(window.id)
             return
         }
+        let wantsParked = options.clickThrough || options.alwaysOnTop
         if let s = sessions[window.id] {
-            s.update(alpha: value, options: options)
-            return
+            if s.isParked == wantsParked {
+                s.update(alpha: value, options: options)
+                return
+            }
+            restore(window.id) // switching between in-place and parked: start over
         }
         if starting[window.id] != nil { // a start is in flight (slider drag): remember the latest value
             starting[window.id] = (value, options)
             return
         }
         starting[window.id] = (value, options)
-        let session = MirrorSession(window: window, alpha: value, options: options, resolver: resolver, journal: journal)
+        let session: any OverlaySession = wantsParked
+            ? MirrorSession(window: window, alpha: value, options: options, resolver: resolver, journal: journal)
+            : InPlaceSession(window: window, alpha: value)
         session.onEnded = { [weak self] id, error in
             self?.sessions[id] = nil
+            self?.sessionsChanged()
             self?.onWindowLost?(id, error)
         }
         do {
@@ -48,11 +57,19 @@ public final class MirrorBackend: OpacityBackend {
         }
         let latest = starting.removeValue(forKey: window.id)
         sessions[window.id] = session
+        sessionsChanged()
         if let latest { session.update(alpha: latest.value, options: latest.options) }
     }
 
     public func restore(_ id: WindowID) {
         sessions.removeValue(forKey: id)?.stop()
+        sessionsChanged()
+    }
+
+    /// Backdrop captures must exclude every Seethru window, so tell them when the set changes.
+    private func sessionsChanged() {
+        let all = Array(sessions.values)
+        Task { @MainActor in for s in all { await s.refreshFilters() } }
     }
 
     public func restoreAll() {

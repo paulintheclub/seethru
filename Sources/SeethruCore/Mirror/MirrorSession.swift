@@ -7,7 +7,8 @@ import os
 /// Draws a captured frame stream of ONE foreign window into a borderless overlay with reduced alpha,
 /// while the original window is parked off-screen via Accessibility.
 @MainActor
-final class MirrorSession {
+final class MirrorSession: OverlaySession {
+    let isParked = true
     let window: WindowInfo
     private(set) var alpha: Double
     private(set) var options: WindowOptions
@@ -29,7 +30,7 @@ final class MirrorSession {
     private var tickCount = 0
     private var ended = false
     private var scWindow: SCWindow?
-    private var covers: [StripCover] = []
+    private var covers: [BackdropCover] = []
     private var refreshingCovers = false
 
     init(window: WindowInfo, alpha: Double, options: WindowOptions, resolver: any AXWindowIDResolving, journal: HiddenWindowJournal) {
@@ -83,6 +84,10 @@ final class MirrorSession {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+    }
+
+    func refreshFilters() async {
+        for c in covers { await c.refreshFilter() }
     }
 
     func update(alpha: Double, options: WindowOptions) {
@@ -182,7 +187,7 @@ final class MirrorSession {
             if let stream { Task { try? await stream.updateConfiguration(configuration()) } }
         }
         view.targetOrigin = anchor
-        if hidden, StripCover.visibleRects(origin: anchor, size: size) != covers.map(\.rect) { Task { await refreshCovers() } }
+        if hidden, BackdropCover.visibleRects(origin: anchor, size: size) != covers.map(\.rect) { Task { await refreshCovers() } }
         if tickCount % 3 == 0 { keepZOrder() }
         if tickCount % 10 == 0, !CGWindowListContains(window.id.number) { end(nil) }
     }
@@ -195,7 +200,7 @@ final class MirrorSession {
         guard let own = numbers.firstIndex(of: UInt32(panel.windowNumber)),
               let orig = numbers.firstIndex(of: window.id.number) else { return }
         if own != orig - 1 { panel.order(.above, relativeTo: Int(window.id.number)) }
-        covers.forEach { $0.keepAbove(window.id.number) }
+        covers.forEach { $0.order(above: Int(window.id.number)) }
     }
 
     // MARK: strip covers
@@ -211,9 +216,9 @@ final class MirrorSession {
         refreshingCovers = true
         defer { refreshingCovers = false }
         clearCovers()
-        for rect in StripCover.visibleRects(origin: anchor, size: size) {
-            let cover = StripCover(rect: rect)
-            do { try await cover.start(excluding: scWindow); covers.append(cover) } catch { cover.stop() }
+        for rect in BackdropCover.visibleRects(origin: anchor, size: size) {
+            let cover = BackdropCover(rect: rect, original: scWindow)
+            do { try await cover.start(); covers.append(cover) } catch { cover.stop() }
         }
     }
 

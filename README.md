@@ -27,27 +27,31 @@ per window, global hotkeys, and per-app memory. Everything runs on your Mac: no 
 
 macOS does not let one app change another app's window opacity. The direct route (private SkyLight `SLSSetWindowAlpha`)
 returns success but is silently ignored for other apps' windows when System Integrity Protection is on, which we
-measured (see FEASIBILITY). So Seethru's default **Mirror** backend:
+measured (see FEASIBILITY). So Seethru's default **Mirror** backend leaves the window where it is and stacks two
+click-through panels on top of it:
 
-1. captures the window with ScreenCaptureKit,
-2. shows a live, see-through copy in a borderless overlay,
-3. moves the original window off-screen with the Accessibility API, and moves it back on reset or quit.
+1. a backdrop that shows the screen as it looks without that window (ScreenCaptureKit display capture, window excluded),
+2. a live copy of the window drawn at your opacity.
+
+The result is the window blended with what is behind it, while clicks, scrolling and typing still go to the real window.
+Only **Screen Recording** permission is needed. Click-through and always-on-top work differently: the real window is moved
+off-screen with the Accessibility API and the copy is shown instead, which also needs **Accessibility**.
 
 Consequences you should know about:
 
-- Needs **Screen Recording** and **Accessibility** permission. The prompts explain why; nothing is stored or sent.
-- The overlay is a copy: slight latency, mouse input is forwarded to the hidden window, some content (DRM video, secure
-  fields) may not be captured, full-screen windows are not supported.
-- It uses private/undocumented behaviour (`_AXUIElementGetWindow`, SkyLight for the optional backend), so **a macOS update
-  can break it**. All of it is isolated in `Sources/PrivateAPI` and fails with a message, not a crash.
-- If Seethru is killed while a window is parked off-screen, the next launch moves it back (it remembers the position).
+- Slight latency: the backdrop and the copy are a frame or two behind. When you click a window macOS raises it above the
+  panels for a moment before Seethru puts them back (a brief flicker).
+- Some content (DRM video, secure fields) may not be captured. Full-screen windows are not supported.
+- Two transparent windows that overlap show each other opaque.
+- It relies on undocumented behaviour (`_AXUIElementGetWindow` for parked mode, SkyLight for the optional backend), so **a macOS
+  update can break it**. All of it is isolated in `Sources/PrivateAPI` and fails with a message, not a crash.
 - Not sandboxed (impossible with Accessibility), so it cannot be on the Mac App Store.
 - With a crowded menu bar macOS may hide the icon. Open Seethru again from Finder/Spotlight to get a regular window.
 
 ## Install
 
 Download `Seethru-<version>.zip` from Releases, unzip, move to Applications. Releases are not notarized, so the first time:
-right-click → Open. Then grant Screen Recording and Accessibility in the welcome window and relaunch.
+right-click → Open. Then grant Screen Recording in the welcome window (Accessibility only for click-through) and relaunch.
 
 Build it yourself (Command Line Tools are enough, Xcode is not required):
 

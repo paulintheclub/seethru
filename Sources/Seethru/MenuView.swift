@@ -189,12 +189,12 @@ struct AppRow: View {
                     set: { on in on ? model.remember(app: group) : model.forgetRule(bundleID: group.bundleID!) }))
             }
             if model.capabilities.contains(.alwaysOnTop) {
-                Toggle("Always on top", isOn: Binding(
+                Toggle("Always on top (needs Accessibility)", isOn: Binding(
                     get: { options.alwaysOnTop },
                     set: { model.setOptions(app: group, WindowOptions(alwaysOnTop: $0, clickThrough: options.clickThrough)) }))
             }
             if model.capabilities.contains(.clickThrough) {
-                Toggle("Click-through", isOn: Binding(
+                Toggle("Click-through (needs Accessibility)", isOn: Binding(
                     get: { options.clickThrough },
                     set: { model.setOptions(app: group, WindowOptions(alwaysOnTop: options.alwaysOnTop, clickThrough: $0)) }))
             }
