@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Builds build/Seethru.app from the SwiftPM executable.
-#   SIGN_IDENTITY   codesign identity (default "-" = ad-hoc). With ad-hoc signing macOS forgets the
-#                   Accessibility / Screen Recording grants after every rebuild; use a stable
-#                   identity (e.g. "Apple Development: Your Name (TEAMID)") during development.
+#   SIGN_IDENTITY   codesign identity (default "-" = ad-hoc). A plain ad-hoc signature is identified by the hash of
+#                   the code, which changes on every build, so macOS forgets the Accessibility / Screen Recording
+#                   grants. For ad-hoc builds this script therefore pins the designated requirement to the bundle id,
+#                   which keeps grants valid across rebuilds and updates. Use a real identity
+#                   (e.g. "Developer ID Application: Your Name (TEAMID)") for releases when you have one.
 #   CONFIG          release (default) or debug
 #   ARCHS           e.g. "arm64 x86_64" for a universal build (default: this machine)
 set -euo pipefail
@@ -23,6 +25,12 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Hardened runtime, no sandbox (Accessibility + private APIs cannot be sandboxed).
-codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$APP"
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Resources/Info.plist)"
+if [[ "$IDENTITY" == "-" ]]; then
+  codesign --force --options runtime --timestamp=none --sign - \
+    -r="designated => identifier \"$BUNDLE_ID\"" "$APP"
+else
+  codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
+fi
 codesign --verify --strict "$APP"
 echo "Built $APP (signed with: $IDENTITY)"

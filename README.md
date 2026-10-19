@@ -49,17 +49,25 @@ Consequences you should know about:
 
 ## Install
 
-Download `Seethru-<version>.zip` from Releases, unzip, move to Applications. Releases are not notarized, so the first time:
-right-click → Open. Then grant Screen Recording and Accessibility in the welcome window and relaunch.
+1. Download `Seethru-<version>.dmg` from Releases, open it and drag **Seethru** to **Applications**.
+2. Open it from Applications or Spotlight like any app. It has no Dock icon; it lives in the menu bar.
+3. Releases are not notarized (that needs a paid Apple Developer account), so macOS blocks the first launch:
+   open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Seethru
+   (on older macOS: right-click the app → Open).
+4. Grant **Screen Recording** and **Accessibility** in the welcome window, then use **Relaunch Seethru**.
+
+If System Settings shows Seethru as allowed but the app says a permission is missing, run `scripts/reset-permissions.sh`
+(or remove the Seethru rows with the − button) and grant both again.
 
 Build it yourself (Command Line Tools are enough, Xcode is not required):
 
 ```bash
-scripts/run.sh
+scripts/run.sh        # build and launch
+scripts/package.sh    # dist/Seethru-<version>.dmg and .zip
 ```
 
-Permissions follow the code signature. Ad-hoc builds lose them on every rebuild; for development sign with a stable
-identity: `SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" scripts/run.sh`.
+Permissions follow the code signature. Ad-hoc builds are pinned to the bundle id, so grants survive rebuilds. With a real
+certificate use `SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" scripts/package.sh`.
 
 ## Repository
 
