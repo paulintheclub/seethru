@@ -1,6 +1,6 @@
 import AppKit
 import ApplicationServices
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import PrivateAPI
 import os
 

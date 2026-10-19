@@ -1,5 +1,5 @@
 import AppKit
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 
 /// Default mode. The original window stays exactly where it is and keeps getting real clicks, scrolls and typing.
 /// Two click-through panels are stacked directly above it:

@@ -1,5 +1,5 @@
 import AppKit
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 
 /// A panel that shows what the screen looks like WITHOUT a given window: a display capture of its own rectangle that
 /// excludes that window and every Seethru window. Placed directly above the window it hides it completely, and
