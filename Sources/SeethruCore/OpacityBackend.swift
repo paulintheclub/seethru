@@ -37,7 +37,7 @@ public enum BackendError: Error, Equatable, LocalizedError, Sendable {
         case .windowNotFound:
             "The window is no longer available."
         case .cannotHideOriginal:
-            "macOS would not move the original window out of sight, so it cannot be made transparent."
+            "This app\u{2019}s window cannot be moved out of sight (macOS keeps too much of it on screen), so a see-through copy would show a double image."
         case .captureFailed(let m):
             "Screen capture failed: \(m)"
         }

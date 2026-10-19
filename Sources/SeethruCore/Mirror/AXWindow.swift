@@ -56,9 +56,22 @@ enum ScreenGeometry {
         cgScreenFrames().contains { $0.intersects(rect) }
     }
 
+    /// Area of `rect` that lies on any screen.
+    static func visibleArea(_ rect: CGRect) -> CGFloat {
+        cgScreenFrames().reduce(0) { $0 + $1.intersection(rect).width.clamped(min: 0) * $1.intersection(rect).height.clamped(min: 0) }
+    }
+
+    /// macOS (and apps such as Chrome) refuse to move a window completely off-screen and keep a strip of it
+    /// reachable. A window counts as parked when no more than this share of it is still on a screen.
+    static let parkedVisibleShare: CGFloat = 0.04
+
     /// AppKit frame (bottom-left origin) for a rect given in CG coordinates.
     static func appKitFrame(fromCG r: CGRect) -> NSRect {
         let h = NSScreen.screens.first?.frame.height ?? 0
         return NSRect(x: r.minX, y: h - r.maxY, width: r.width, height: r.height)
     }
+}
+
+private extension CGFloat {
+    func clamped(min lower: CGFloat) -> CGFloat { self < lower ? lower : self }
 }

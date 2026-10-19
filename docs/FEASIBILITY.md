@@ -46,7 +46,20 @@ Things to report (the spike prints `RESULT` lines for the first three):
 3. With `--forward`: how many events were forwarded; do clicks, scrolling, typing reach the hidden window?
 4. Visually: latency, hover effects, drag, text input, shadows, secure content.
 
-### Results so far (overlay-only run, `.build/SpikeB SpikeTarget --alpha 0.5`)
+### Results from the user's Terminal (Chrome, 1920x1050 pt window on a second display, `--hide --forward`)
+
+| Check | Result |
+|---|---|
+| ScreenCaptureKit | 58 fps, 3840x2100 px surface, zero-copy |
+| AX move to (-20000, -20000) | rc 0, but **clamped to (-1880, 33)**: ~40 px strip of the window stays on the built-in display |
+| Frames while parked | 62 fps (they keep coming) |
+| Forwarded events | 950 sent; whether they reached the hidden window is not yet confirmed |
+
+So a window cannot be hidden completely (macOS and/or the app keep a reachable strip). The app now tries all four far
+corners, keeps the least visible one and accepts the result when at most 4% of the window is still on a screen. The strip
+itself stays visible; covering it is a possible follow-up. Other apps (Safari, Terminal) may clamp differently: untested.
+
+### Earlier results (overlay-only run, `.build/SpikeB SpikeTarget --alpha 0.5`)
 
 Run from the agent's shell, which had Screen Recording but **not** Accessibility, so only step 1 and the overlay itself could be tested.
 

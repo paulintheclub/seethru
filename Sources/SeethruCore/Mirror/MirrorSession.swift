@@ -114,24 +114,31 @@ final class MirrorSession {
 
     // MARK: original window
 
+    /// Tries the four far corners and keeps the one that leaves the least of the window on a screen.
     private func hideOriginal() throws {
         guard let ax else { throw BackendError.windowNotFound }
         journal.add(HiddenWindowEntry(pid: window.id.pid, windowNumber: window.id.number, originX: home.x, originY: home.y))
-        let maxX = ScreenGeometry.cgScreenFrames().map(\.maxX).max() ?? 4000
-        let candidates = [CGPoint(x: -20000, y: -20000), CGPoint(x: maxX + 20000, y: 20000), CGPoint(x: -size.width - 4000, y: home.y)]
-        for c in candidates {
+        let corners = [CGPoint(x: -20000, y: -20000), CGPoint(x: -20000, y: 20000),
+                       CGPoint(x: 20000, y: -20000), CGPoint(x: 20000, y: 20000)]
+        let total = size.width * size.height
+        var best: (requested: CGPoint, actual: CGPoint, area: CGFloat)?
+        for c in corners {
             ax.setPosition(c)
             usleep(40_000)
-            if let actual = ax.position, !ScreenGeometry.isVisible(CGRect(origin: actual, size: size)) {
-                anchor = actual
-                hidden = true
-                return
-            }
+            guard let actual = ax.position else { continue }
+            let area = ScreenGeometry.visibleArea(CGRect(origin: actual, size: size))
+            if best == nil || area < best!.area { best = (c, actual, area) }
+            if area == 0 { break }
         }
-        // macOS clamped every attempt: put it back and report instead of showing a double image.
-        ax.setPosition(home)
-        journal.remove(pid: window.id.pid, windowNumber: window.id.number)
-        throw BackendError.cannotHideOriginal
+        guard let best, best.area / max(total, 1) <= ScreenGeometry.parkedVisibleShare else {
+            ax.setPosition(home)
+            journal.remove(pid: window.id.pid, windowNumber: window.id.number)
+            throw BackendError.cannotHideOriginal
+        }
+        ax.setPosition(best.requested)
+        usleep(40_000)
+        anchor = ax.position ?? best.actual
+        hidden = true
     }
 
     private func revealOriginal() {
@@ -150,7 +157,7 @@ final class MirrorSession {
             if !CGWindowListContains(window.id.number) { end(nil) }
             return
         }
-        if ScreenGeometry.isVisible(CGRect(origin: pos, size: size)) {
+        if ScreenGeometry.visibleArea(CGRect(origin: pos, size: size)) > size.width * size.height * 0.5 {
             // Something pulled the original back on-screen (display change, app logic). Park it again.
             ax.setPosition(anchor)
         } else if abs(pos.x - anchor.x) > 0.5 || abs(pos.y - anchor.y) > 0.5 {

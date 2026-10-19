@@ -192,12 +192,25 @@ Task {
         if hide {
             if let w = axWindow(pid: pid, windowID: wid) {
                 axWin = w
-                let target = CGPoint(x: -20000, y: -20000)
-                let rc = axSetPosition(w, target)
+                let screens = NSScreen.screens.map { CGRect(x: $0.frame.minX, y: primaryH - $0.frame.maxY, width: $0.frame.width, height: $0.frame.height) }
+                func visibleShare(_ r: CGRect) -> Double {
+                    let a = screens.reduce(0.0) { $0 + Double(max(0, $1.intersection(r).width) * max(0, $1.intersection(r).height)) }
+                    return a / Double(r.width * r.height)
+                }
+                var bestShare = 2.0
+                var bestReq = CGPoint.zero
+                for c in [CGPoint(x: -20000, y: -20000), CGPoint(x: -20000, y: 20000), CGPoint(x: 20000, y: -20000), CGPoint(x: 20000, y: 20000)] {
+                    axSetPosition(w, c)
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    let now = axPosition(w) ?? .zero
+                    let share = visibleShare(CGRect(origin: now, size: size))
+                    log(String(format: "RESULT candidate %@ -> actual %@ visible share of window on screen = %.1f%%", "\(c)", "\(now)", share * 100))
+                    if share < bestShare { bestShare = share; bestReq = c }
+                }
+                axSetPosition(w, bestReq)
                 movedAway = true
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                let now = axPosition(w)
-                log("RESULT AX move rc=\(rc.rawValue) requested=\(target) actual=\(String(describing: now))  clamped=\(now != target)")
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                log(String(format: "RESULT chosen %@ visible share %.1f%% (0%% = fully hidden; app keeps its own clamp otherwise)", "\(bestReq)", bestShare * 100))
                 let f = await fps(over: 3)
                 log(String(format: "RESULT SCK fps after hide=%.1f (0 => frames stop when window is off-screen) frames total=%d", f, sink.frames))
             } else { log("RESULT could not resolve AX window (check _AXUIElementGetWindow / Accessibility)") }
