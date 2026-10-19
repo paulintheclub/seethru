@@ -28,6 +28,9 @@ final class MirrorSession {
     private var timer: Timer?
     private var tickCount = 0
     private var ended = false
+    private var scWindow: SCWindow?
+    private var covers: [StripCover] = []
+    private var refreshingCovers = false
 
     init(window: WindowInfo, alpha: Double, options: WindowOptions, resolver: any AXWindowIDResolving, journal: HiddenWindowJournal) {
         self.window = window
@@ -53,6 +56,7 @@ final class MirrorSession {
         do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) }
         catch { throw BackendError.captureFailed(error.localizedDescription) }
         guard let scWindow = content.windows.first(where: { $0.windowID == window.id.number }) else { throw BackendError.windowNotFound }
+        self.scWindow = scWindow
 
         buildPanel()
         let s = SCStream(filter: SCContentFilter(desktopIndependentWindow: scWindow), configuration: configuration(), delegate: sink)
@@ -74,6 +78,7 @@ final class MirrorSession {
         guard sink.frameCount > 0 else { await abort(); throw BackendError.captureFailed("no frames received") }
 
         do { try hideOriginal() } catch { await abort(); throw error }
+        await refreshCovers()
 
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -92,6 +97,7 @@ final class MirrorSession {
         guard !ended else { return }
         ended = true
         timer?.invalidate()
+        clearCovers()
         revealOriginal()
         if let s = stream { Task { try? await s.stopCapture() } }
         stream = nil
@@ -100,6 +106,7 @@ final class MirrorSession {
 
     private func abort() async {
         ended = true
+        clearCovers()
         revealOriginal()
         if let s = stream { try? await s.stopCapture() }
         stream = nil
@@ -175,6 +182,7 @@ final class MirrorSession {
             if let stream { Task { try? await stream.updateConfiguration(configuration()) } }
         }
         view.targetOrigin = anchor
+        if hidden, StripCover.visibleRects(origin: anchor, size: size) != covers.map(\.rect) { Task { await refreshCovers() } }
         if tickCount % 3 == 0 { keepZOrder() }
         if tickCount % 10 == 0, !CGWindowListContains(window.id.number) { end(nil) }
     }
@@ -187,6 +195,26 @@ final class MirrorSession {
         guard let own = numbers.firstIndex(of: UInt32(panel.windowNumber)),
               let orig = numbers.firstIndex(of: window.id.number) else { return }
         if own != orig - 1 { panel.order(.above, relativeTo: Int(window.id.number)) }
+        covers.forEach { $0.keepAbove(window.id.number) }
+    }
+
+    // MARK: strip covers
+
+    private func clearCovers() {
+        covers.forEach { $0.stop() }
+        covers.removeAll()
+    }
+
+    /// Cover whatever strip of the parked original macOS left on a screen.
+    private func refreshCovers() async {
+        guard !refreshingCovers, !ended, hidden, let scWindow else { return }
+        refreshingCovers = true
+        defer { refreshingCovers = false }
+        clearCovers()
+        for rect in StripCover.visibleRects(origin: anchor, size: size) {
+            let cover = StripCover(rect: rect)
+            do { try await cover.start(excluding: scWindow); covers.append(cover) } catch { cover.stop() }
+        }
     }
 
     // MARK: panel + stream config
