@@ -14,6 +14,13 @@ struct SeethruApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        // Same content as the menu bar popover, for Macs whose menu bar is too crowded to show our icon
+        // (reopen the app from Finder/Spotlight to get it).
+        Window("Seethru", id: WindowID.main) {
+            MenuView(model: delegate.model)
+        }
+        .windowResizability(.contentSize)
+
         Window("Seethru Settings", id: WindowID.settings) {
             SettingsView(model: delegate.model)
         }
@@ -27,6 +34,7 @@ struct SeethruApp: App {
 }
 
 enum WindowID {
+    static let main = "main"
     static let settings = "settings"
     static let onboarding = "onboarding"
 }
@@ -51,9 +59,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NotificationCenter.default.post(name: .showMainWindow, object: nil)
+        return true
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         model.shutdown()
     }
+}
+
+extension Notification.Name {
+    static let showMainWindow = Notification.Name("io.github.seethru.showMainWindow")
 }
 
 /// Brings one of our windows to the front. A menu bar (LSUIElement) app is never active on its own.

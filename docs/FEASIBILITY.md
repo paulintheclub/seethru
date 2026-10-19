@@ -46,9 +46,24 @@ Things to report (the spike prints `RESULT` lines for the first three):
 3. With `--forward`: how many events were forwarded; do clicks, scrolling, typing reach the hidden window?
 4. Visually: latency, hover effects, drag, text input, shadows, secure content.
 
-Results: _pending_.
+### Results so far (overlay-only run, `.build/SpikeB SpikeTarget --alpha 0.5`)
+
+Run from the agent's shell, which had Screen Recording but **not** Accessibility, so only step 1 and the overlay itself could be tested.
+
+| Check | Result |
+|---|---|
+| ScreenCaptureKit frames for a foreign window | **Works.** First frame immediately, ~61 fps, 840x584 px IOSurface for a 420x292 pt window. |
+| Zero-copy display (`layer.contents = IOSurface`) | **Works.** |
+| Overlay at `alphaValue = 0.5` above the original | **Works** (confirmed in a screenshot: the overlay is see-through). The original was still under it, so this alone shows a double image. |
+| Move the original off-screen via Accessibility (`--hide`) | **Not tested yet.** Needs Accessibility for the terminal. |
+| Do frames keep coming while the original is off-screen | **Not tested yet.** |
+| Input forwarding (`--forward`) | **Not tested yet.** |
+
+The app's `MirrorBackend` implements the full design (hide via AX with off-screen candidates, read-back check that
+refuses to continue if macOS clamps the window, crash journal, mouse forwarding). It fails with a clear message
+instead of showing a double image if the original cannot be hidden.
 
 ## Decision gate
 
-- A fails (above). Mirror backend (B) is the candidate primary backend, pending the user's run of the spike.
+- A fails (above). Mirror backend (B) is the primary backend in the app; capture and overlay are proven, hiding the original is still to be confirmed on the user's Mac.
 - If B is unacceptable, stop and keep this document as the write-up.

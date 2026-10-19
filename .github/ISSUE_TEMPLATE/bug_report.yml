@@ -1,0 +1,26 @@
+name: Bug report
+description: Something does not work
+body:
+  - type: input
+    id: macos
+    attributes: { label: macOS version, placeholder: "26.6.2 (25G83)" }
+    validations: { required: true }
+  - type: input
+    id: chip
+    attributes: { label: Chip, placeholder: "Apple M2 / Intel" }
+    validations: { required: true }
+  - type: dropdown
+    id: backend
+    attributes: { label: Backend, options: [Mirror, SkyLight] }
+  - type: input
+    id: app
+    attributes: { label: App whose window is affected, placeholder: "Safari 19" }
+  - type: checkboxes
+    id: perms
+    attributes:
+      label: Permissions granted
+      options: [{ label: Screen Recording }, { label: Accessibility }]
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: "Include what you expected and, if possible, a screenshot." }
+    validations: { required: true }

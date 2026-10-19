@@ -33,9 +33,13 @@ struct MenuBarLabel: View {
         Image(nsImage: MenuBarImage.make(active: model.activeCount > 0))
             .accessibilityLabel(model.activeCount > 0 ? "Seethru, \(model.activeCount) windows transparent" : "Seethru")
             .task {
+                if CommandLine.arguments.contains("--show-window") { bringToFront(openWindow, WindowID.main) }
                 guard !onboardingShown else { return }
                 onboardingShown = true
                 bringToFront(openWindow, WindowID.onboarding)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showMainWindow)) { _ in
+                bringToFront(openWindow, WindowID.main)
             }
     }
 }

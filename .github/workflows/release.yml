@@ -1,0 +1,21 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: scripts/test.sh
+      - name: Build (universal, ad-hoc signed)
+        run: ARCHS="arm64 x86_64" scripts/build.sh
+      - name: Zip
+        run: ditto -c -k --keepParent build/Seethru.app "Seethru-${GITHUB_REF_NAME}.zip"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: Seethru-*.zip
+          generate_release_notes: true
