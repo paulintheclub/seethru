@@ -5,7 +5,9 @@ import AppKit
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
 
-let win = NSWindow(contentRect: NSRect(x: 300, y: 300, width: 420, height: 260),
+var originX = 300.0
+if let i = CommandLine.arguments.firstIndex(of: "--x"), CommandLine.arguments.count > i + 1, let x = Double(CommandLine.arguments[i + 1]) { originX = x }
+let win = NSWindow(contentRect: NSRect(x: originX, y: 300, width: 420, height: 260),
                    styleMask: [.titled, .closable, .resizable],
                    backing: .buffered, defer: false)
 win.title = "SpikeTarget"

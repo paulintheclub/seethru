@@ -1,12 +1,13 @@
-import AppKit
 @preconcurrency import ScreenCaptureKit
+import AppKit
 
 /// Default mode. The original window stays exactly where it is and keeps getting real clicks, scrolls and typing.
 /// Two click-through panels are stacked directly above it:
-///   1. backdrop: what the screen shows without this window (BackdropCover)
+///   1. backdrop: what the screen shows without this window (BackdropCover, fed by the shared display capture)
 ///   2. overlay: a live copy of the window at alpha < 1
 /// Result: alpha * window + (1 - alpha) * backdrop, which is what a see-through window looks like.
 /// No Accessibility permission, nothing is moved, nothing needs restoring if Seethru dies.
+/// While the window is not on screen (minimized, other Space, hidden app) every capture of it is stopped.
 @MainActor
 final class InPlaceSession: OverlaySession {
     let isParked = false
@@ -14,26 +15,28 @@ final class InPlaceSession: OverlaySession {
     private var alpha: Double
     var onEnded: (@MainActor (WindowID, BackendError?) -> Void)?
 
+    private let hub: BackdropHub
     private var overlay: NSPanel!
     private var overlayView: NSView!
     private let sink = FrameSink()
     private var stream: SCStream?
     private var covers: [BackdropCover] = []
-    private var scWindow: SCWindow?
     private var frame = CGRect.zero
     private var shown = false
+    private var suspended = false
+    private var transitioning = false
     private var ended = false
     private var timer: Timer?
     private var mouseMonitor: Any?
     private var activationObserver: NSObjectProtocol?
-    private var tick = 0
     private var rebuilding = false
     private var syncing = false
     private var syncAgain = false
 
-    init(window: WindowInfo, alpha: Double) {
+    init(window: WindowInfo, alpha: Double, hub: BackdropHub) {
         self.window = window
         self.alpha = alpha
+        self.hub = hub
     }
 
     // MARK: lifecycle
@@ -42,27 +45,15 @@ final class InPlaceSession: OverlaySession {
         guard CGPreflightScreenCaptureAccess() else { throw BackendError.permissionMissing(.screenRecording) }
         guard let state = WindowGeometry.state(of: window.id.number) else { throw BackendError.windowNotFound }
         frame = state.bounds
-
-        let content: SCShareableContent
-        do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) }
-        catch { throw BackendError.captureFailed(error.localizedDescription) }
-        guard let scw = content.windows.first(where: { $0.windowID == window.id.number }) else { throw BackendError.windowNotFound }
-        scWindow = scw
-
         buildOverlay()
-        let s = SCStream(filter: SCContentFilter(desktopIndependentWindow: scw), configuration: windowConfiguration(), delegate: sink)
         sink.onStop = { [weak self] error in
             Task { @MainActor in self?.end(error.map { .captureFailed($0.localizedDescription) }) }
         }
         sink.view = overlayView
-        do {
-            try s.addStreamOutput(sink, type: .screen, sampleHandlerQueue: DispatchQueue(label: "seethru.capture", qos: .userInteractive))
-            try await s.startCapture()
-        } catch {
+        do { try await startWindowStream() } catch {
             teardown()
-            throw BackendError.captureFailed(error.localizedDescription)
+            throw error
         }
-        stream = s
 
         await rebuildCovers()
         // Show the overlay only once both layers have pixels, so the window never flashes double.
@@ -102,10 +93,6 @@ final class InPlaceSession: OverlaySession {
         }
     }
 
-    func refreshFilters() async {
-        for c in covers { await c.refreshFilter() }
-    }
-
     func stop() {
         guard !ended else { return }
         ended = true
@@ -130,14 +117,17 @@ final class InPlaceSession: OverlaySession {
     // MARK: tracking
 
     private func onTick() {
-        guard !ended else { return }
-        tick += 1
+        guard !ended, !transitioning else { return }
         guard let state = WindowGeometry.state(of: window.id.number) else { end(nil); return }
-        if !state.onScreen { // minimized, other Space, hidden app
-            if shown { hideGroup() }
+        if !state.onScreen { // minimized, other Space, hidden app: stop all captures until it is back
+            if !suspended { Task { await suspend() } }
             return
         }
-        if !shown { showGroup() }
+        if suspended {
+            frame = state.bounds
+            Task { await resume() }
+            return
+        }
         if state.bounds != frame {
             frame = state.bounds
             overlay.setFrame(ScreenGeometry.appKitFrame(fromCG: frame), display: false)
@@ -146,6 +136,35 @@ final class InPlaceSession: OverlaySession {
             scheduleSync()
         }
         restackIfNeeded()
+    }
+
+    private func suspend() async {
+        guard !suspended, !transitioning, !ended else { return }
+        transitioning = true
+        suspended = true
+        hideGroup()
+        if let s = stream { try? await s.stopCapture() }
+        stream = nil
+        covers.forEach { $0.stop() }
+        covers.removeAll()
+        transitioning = false
+    }
+
+    private func resume() async {
+        guard suspended, !transitioning, !ended else { return }
+        transitioning = true
+        overlay.setFrame(ScreenGeometry.appKitFrame(fromCG: frame), display: false)
+        overlayView.frame = NSRect(origin: .zero, size: frame.size)
+        do { try await startWindowStream() } catch {
+            transitioning = false
+            end(error as? BackendError ?? .captureFailed(error.localizedDescription))
+            return
+        }
+        await rebuildCovers()
+        for _ in 0..<20 where !(sink.frameCount > 0 && covers.allSatisfy(\.hasFrames)) { try? await Task.sleep(nanoseconds: 25_000_000) }
+        suspended = false
+        showGroup()
+        transitioning = false
     }
 
     /// Stack, front to back: overlay, backdrops, original, with nothing in between. Anything else means the original
@@ -172,15 +191,29 @@ final class InPlaceSession: OverlaySession {
 
     // MARK: layers
 
+    private func startWindowStream() async throws {
+        let content: SCShareableContent
+        do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) }
+        catch { throw BackendError.captureFailed(error.localizedDescription) }
+        guard let scw = content.windows.first(where: { $0.windowID == window.id.number }) else { throw BackendError.windowNotFound }
+        sink.resetFrameCount()
+        let s = SCStream(filter: SCContentFilter(desktopIndependentWindow: scw), configuration: windowConfiguration(), delegate: sink)
+        do {
+            try s.addStreamOutput(sink, type: .screen, sampleHandlerQueue: DispatchQueue(label: "seethru.capture", qos: .userInteractive))
+            try await s.startCapture()
+        } catch { throw BackendError.captureFailed(error.localizedDescription) }
+        stream = s
+    }
+
     /// Keep one backdrop per screen the window touches.
     private func rebuildCovers() async {
-        guard let scWindow, !rebuilding else { return }
+        guard !rebuilding else { return }
         rebuilding = true
         defer { rebuilding = false }
         covers.forEach { $0.stop() }
         covers.removeAll()
         for rect in BackdropCover.visibleRects(origin: frame.origin, size: frame.size) {
-            let c = BackdropCover(rect: rect, original: scWindow)
+            let c = BackdropCover(rect: rect, originalID: window.id.number, hub: hub)
             do { try await c.start(); covers.append(c) } catch { c.stop() }
         }
     }
@@ -220,7 +253,7 @@ final class InPlaceSession: OverlaySession {
     private func hideGroup() {
         shown = false
         covers.forEach { $0.setVisible(false) }
-        overlay.orderOut(nil)
+        overlay?.orderOut(nil)
     }
 
     private func buildOverlay() {

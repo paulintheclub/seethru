@@ -35,9 +35,11 @@ A direct SkyLight alpha backend was tried and removed: macOS ignores it for othe
 In-place details (`Mirror/InPlaceSession.swift`, `Mirror/StripCover.swift` = `BackdropCover`): a 60 Hz tick follows the original's
 frame from `CGWindowList` (no Accessibility) and checks the stacking with a cheap `optionOnScreenAboveWindow` query; a global mouse
 monitor and app-activation notifications trigger bursts of re-stacking right after a click raises the original (stack, front to back: overlay, backdrop, original). The panels are flagged non-opaque on purpose so the window server
-still counts the original as visible and apps like Chrome keep rendering. The backdrop capture excludes the original and all
-Seethru windows (`refreshFilters` runs when the set of sessions changes). Known limit: two overlapping transparent windows show
-the other one opaque in the backdrop.
+still counts the original as visible and apps like Chrome keep rendering. One display capture per display is shared by all backdrop panels on it (`Mirror/BackdropHub.swift`): it covers the union of their
+rectangles, excludes all Seethru windows and all managed originals, and each panel shows its own crop via `contentsRect`. With
+three windows this costs about the same as with one (WindowServer ~77% vs 89-101% with one capture per window). While a window is
+not on screen (minimized, other Space, hidden app) its captures are stopped. Known limit: two overlapping transparent windows
+see through each other's original instead of each other's blended look.
 
 ## Safety
 
