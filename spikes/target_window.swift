@@ -18,6 +18,13 @@ v.wantsLayer = true
 v.layer?.backgroundColor = NSColor.systemOrange.cgColor
 v.autoresizingMask = [.width, .height]
 win.contentView = v
+if CommandLine.arguments.contains("--animate") {
+    var phase = 0.0
+    Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { _ in
+        phase += 0.02
+        v.layer?.backgroundColor = NSColor(hue: phase.truncatingRemainder(dividingBy: 1), saturation: 0.8, brightness: 0.9, alpha: 1).cgColor
+    }
+}
 win.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps: true)
 print("pid=\(getpid()) window=\(win.windowNumber)")

@@ -83,6 +83,33 @@ instead of showing a double image if the original cannot be hidden.
   Verified with a test window: blend looks right, no double image. Real clicks through the panels are still to be confirmed
   in Chrome.
 
+## Cost of the in-place mode (measured, macOS 26.6.2, Apple Silicon, one dimmed window)
+
+WindowServer CPU with a busy desktop: 48-52% without Seethru, 75-81% with it (+25-30 points of one core). Seethru's own
+process is mostly idle (profile: kernel waits), 11-16% in `top`.
+
+| Variant | WindowServer |
+|---|---|
+| no Seethru | 51.9% |
+| backdrop + overlay, 60 fps | 80.9% |
+| backdrop 30 fps / 15 fps | 74.8% / 73.2% |
+| window copy 15 fps | 71.4% |
+| backdrop at 1x resolution | 76.4% |
+| backdrop via include-windows filter | 80.4% |
+| overlay only, no backdrop | 52.4% (same as baseline) |
+
+The display capture used for the backdrop causes essentially all of the extra WindowServer work, and it does not scale
+with frame rate, resolution or filter type. It is a fixed cost per capture session.
+
+## Alternatives researched
+
+- SkyLight alpha with SIP on: ignored for foreign windows (measured above; OmniWM reports the same).
+- yabai-style scripting addition injected into Dock: the only route with real alpha, but needs SIP partly disabled (yabai docs).
+  Out of scope for this project.
+- Virtual display (private `CGVirtualDisplay`, used by DeskPad): the original could live on a display nobody sees, but input
+  would still have to be forwarded (which failed for Chrome), the system gets an extra display, and ScreenCaptureKit has known
+  problems with virtual displays. Not pursued.
+
 ## Decision gate
 
 - A fails (above). Mirror backend (B) is the primary backend in the app; capture and overlay are proven, hiding the original is still to be confirmed on the user's Mac.
