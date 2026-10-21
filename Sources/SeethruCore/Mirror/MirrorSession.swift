@@ -16,7 +16,6 @@ final class MirrorSession: OverlaySession {
 
     private let resolver: any AXWindowIDResolving
     private let journal: HiddenWindowJournal
-    private let hub: BackdropHub
 
     private var panel: MirrorPanel!
     private var view: MirrorView!
@@ -34,8 +33,7 @@ final class MirrorSession: OverlaySession {
     private var covers: [BackdropCover] = []
     private var refreshingCovers = false
 
-    init(window: WindowInfo, alpha: Double, options: WindowOptions, resolver: any AXWindowIDResolving, journal: HiddenWindowJournal, hub: BackdropHub) {
-        self.hub = hub
+    init(window: WindowInfo, alpha: Double, options: WindowOptions, resolver: any AXWindowIDResolving, journal: HiddenWindowJournal) {
         self.window = window
         self.alpha = alpha
         self.options = options
@@ -86,6 +84,10 @@ final class MirrorSession: OverlaySession {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+    }
+
+    func refreshFilters() async {
+        for c in covers { await c.refreshFilter() }
     }
 
     func update(alpha: Double, options: WindowOptions) {
@@ -210,12 +212,12 @@ final class MirrorSession: OverlaySession {
 
     /// Cover whatever strip of the parked original macOS left on a screen.
     private func refreshCovers() async {
-        guard !refreshingCovers, !ended, hidden else { return }
+        guard !refreshingCovers, !ended, hidden, let scWindow else { return }
         refreshingCovers = true
         defer { refreshingCovers = false }
         clearCovers()
         for rect in BackdropCover.visibleRects(origin: anchor, size: size) {
-            let cover = BackdropCover(rect: rect, originalID: window.id.number, hub: hub)
+            let cover = BackdropCover(rect: rect, original: scWindow)
             do { try await cover.start(); covers.append(cover) } catch { cover.stop() }
         }
     }
@@ -346,7 +348,6 @@ final class FrameSink: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Se
     var onStop: (@Sendable (Error?) -> Void)?
 
     var frameCount: Int { frames.withLock { $0 } }
-    func resetFrameCount() { frames.withLock { $0 = 0 } }
     var view: NSView? {
         get { viewLock.withLock { $0 } }
         set { viewLock.withLock { $0 = newValue } }
