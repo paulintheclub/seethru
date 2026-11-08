@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             model.refresh()
-            if let group = model.groups.first(where: { $0.name == name }) { model.setOpacity(app: group, value) }
+            for group in model.groups where group.name == name { model.setOpacity(app: group, value) }
         }
     }
 

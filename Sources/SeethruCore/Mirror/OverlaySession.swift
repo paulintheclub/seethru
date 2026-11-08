@@ -9,7 +9,5 @@ protocol OverlaySession: AnyObject {
     var onEnded: (@MainActor (WindowID, BackendError?) -> Void)? { get set }
     func start() async throws
     func update(alpha: Double, options: WindowOptions)
-    /// Called when other Seethru windows appear or disappear so backdrop captures keep excluding them.
-    func refreshFilters() async
     func stop()
 }

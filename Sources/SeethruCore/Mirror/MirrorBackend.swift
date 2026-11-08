@@ -14,6 +14,7 @@ public final class MirrorBackend: OpacityBackend {
 
     private let resolver: any AXWindowIDResolving
     private let journal: HiddenWindowJournal
+    private let hub = BackdropHub()
     private var sessions: [WindowID: any OverlaySession] = [:]
     private var starting: [WindowID: (value: Double, options: WindowOptions)] = [:]
 
@@ -41,11 +42,10 @@ public final class MirrorBackend: OpacityBackend {
         }
         starting[window.id] = (value, options)
         let session: any OverlaySession = wantsParked
-            ? MirrorSession(window: window, alpha: value, options: options, resolver: resolver, journal: journal)
-            : InPlaceSession(window: window, alpha: value)
+            ? MirrorSession(window: window, alpha: value, options: options, resolver: resolver, journal: journal, hub: hub)
+            : InPlaceSession(window: window, alpha: value, hub: hub)
         session.onEnded = { [weak self] id, error in
             self?.sessions[id] = nil
-            self?.sessionsChanged()
             self?.onWindowLost?(id, error)
         }
         do {
@@ -56,19 +56,11 @@ public final class MirrorBackend: OpacityBackend {
         }
         let latest = starting.removeValue(forKey: window.id)
         sessions[window.id] = session
-        sessionsChanged()
         if let latest { session.update(alpha: latest.value, options: latest.options) }
     }
 
     public func restore(_ id: WindowID) {
         sessions.removeValue(forKey: id)?.stop()
-        sessionsChanged()
-    }
-
-    /// Backdrop captures must exclude every Seethru window, so tell them when the set changes.
-    private func sessionsChanged() {
-        let all = Array(sessions.values)
-        Task { @MainActor in for s in all { await s.refreshFilters() } }
     }
 
     public func restoreAll() {

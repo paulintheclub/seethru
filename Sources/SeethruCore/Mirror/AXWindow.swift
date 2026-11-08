@@ -65,11 +65,23 @@ enum ScreenGeometry {
     /// reachable. A window counts as parked when no more than this share of it is still on a screen.
     static let parkedVisibleShare: CGFloat = 0.04
 
+    /// The display a rectangle (CG coordinates) mostly belongs to.
+    static func displayID(for rect: CGRect) -> CGDirectDisplayID? {
+        let frames = cgScreenFrames()
+        guard let i = frames.indices.max(by: { frames[$0].intersection(rect).area < frames[$1].intersection(rect).area }),
+              frames[i].intersects(rect) else { return nil }
+        return NSScreen.screens[i].deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+    }
+
     /// AppKit frame (bottom-left origin) for a rect given in CG coordinates.
     static func appKitFrame(fromCG r: CGRect) -> NSRect {
         let h = NSScreen.screens.first?.frame.height ?? 0
         return NSRect(x: r.minX, y: h - r.maxY, width: r.width, height: r.height)
     }
+}
+
+private extension CGRect {
+    var area: CGFloat { isNull ? 0 : width * height }
 }
 
 private extension CGFloat {
