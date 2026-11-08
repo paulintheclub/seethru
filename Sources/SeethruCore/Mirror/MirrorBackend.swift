@@ -15,6 +15,7 @@ public final class MirrorBackend: OpacityBackend {
     private let resolver: any AXWindowIDResolving
     private let journal: HiddenWindowJournal
     private let hub = BackdropHub()
+    private let coordinator = StackCoordinator()
     private var sessions: [WindowID: any OverlaySession] = [:]
     private var starting: [WindowID: (value: Double, options: WindowOptions)] = [:]
 
@@ -43,7 +44,7 @@ public final class MirrorBackend: OpacityBackend {
         starting[window.id] = (value, options)
         let session: any OverlaySession = wantsParked
             ? MirrorSession(window: window, alpha: value, options: options, resolver: resolver, journal: journal, hub: hub)
-            : InPlaceSession(window: window, alpha: value, hub: hub)
+            : InPlaceSession(window: window, alpha: value, hub: hub, coordinator: coordinator)
         session.onEnded = { [weak self] id, error in
             self?.sessions[id] = nil
             self?.onWindowLost?(id, error)

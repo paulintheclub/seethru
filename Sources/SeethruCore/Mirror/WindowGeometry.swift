@@ -23,15 +23,36 @@ enum WindowGeometry {
         return State(bounds: bounds, onScreen: (row[kCGWindowIsOnscreen as String] as? NSNumber)?.boolValue ?? false)
     }
 
-    /// On-screen window numbers, front to back.
-    static func zOrder() -> [UInt32] {
-        let rows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-        return rows.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value }
+    struct Entry {
+        let number: UInt32
+        let pid: Int32
+        let layer: Int
+        let bounds: CGRect
+        let alpha: Double
     }
 
-    /// On-screen windows stacked above `number`, front to back. Much cheaper than the full list.
-    static func windowsAbove(_ number: UInt32) -> [UInt32] {
-        let rows = CGWindowListCopyWindowInfo([.optionOnScreenAboveWindow], CGWindowID(number)) as? [[String: Any]] ?? []
-        return rows.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value }
+    /// Every on-screen window, front to back, with a lookup by window number. One call serves all sessions.
+    struct Snapshot {
+        let entries: [Entry]
+        let index: [UInt32: Int]
+    }
+
+    static func snapshot() -> Snapshot {
+        let rows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        var entries: [Entry] = []
+        entries.reserveCapacity(rows.count)
+        for row in rows {
+            guard let number = (row[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let dict = row[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: dict) else { continue }
+            entries.append(Entry(number: number,
+                                 pid: (row[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value ?? 0,
+                                 layer: (row[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0,
+                                 bounds: bounds,
+                                 alpha: (row[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1))
+        }
+        var index: [UInt32: Int] = [:]
+        for (i, e) in entries.enumerated() { index[e.number] = i }
+        return Snapshot(entries: entries, index: index)
     }
 }

@@ -93,6 +93,15 @@ private final class DisplayBackdrop {
         } while syncAgain
     }
 
+    /// The capture died (display change, sleep, window server reset): start it again, or the backdrop would freeze.
+    fileprivate func streamStopped() {
+        stream = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await sync()
+        }
+    }
+
     func refreshFilter() async {
         guard stream != nil, let (filter, _) = try? await makeFilter() else { return }
         try? await stream?.updateContentFilter(filter)
@@ -162,5 +171,10 @@ private final class BackdropSink: NSObject, SCStreamOutput, SCStreamDelegate, @u
         let weakTarget = box.withLock { $0 }
         nonisolated(unsafe) let s = surface
         DispatchQueue.main.async { MainActor.assumeIsolated { weakTarget.value?.deliver(s) } }
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        let weakTarget = box.withLock { $0 }
+        DispatchQueue.main.async { MainActor.assumeIsolated { weakTarget.value?.streamStopped() } }
     }
 }

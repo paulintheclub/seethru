@@ -2,10 +2,14 @@
 import AppKit
 
 /// Default mode. The original window stays exactly where it is and keeps getting real clicks, scrolls and typing.
-/// Two click-through panels are stacked directly above it:
+/// Two click-through panels sit above it:
 ///   1. backdrop: what the screen shows without this window (BackdropCover, fed by the shared display capture)
 ///   2. overlay: a live copy of the window at alpha < 1
 /// Result: alpha * window + (1 - alpha) * backdrop, which is what a see-through window looks like.
+///
+/// The panels use the floating window level, so they stay above the original no matter what the app does to its own
+/// stacking (a click raises the window, which used to make the transparency vanish for a moment). Windows that are
+/// really above the original (another app's window, a popup) are cut out of the panels with a mask, so they show as usual.
 /// No Accessibility permission, nothing is moved, nothing needs restoring if Seethru dies.
 /// While the window is not on screen (minimized, other Space, hidden app) every capture of it is stopped.
 @MainActor
@@ -16,6 +20,7 @@ final class InPlaceSession: OverlaySession {
     var onEnded: (@MainActor (WindowID, BackendError?) -> Void)?
 
     private let hub: BackdropHub
+    private let coordinator: StackCoordinator
     private var overlay: NSPanel!
     private var overlayView: NSView!
     private let sink = FrameSink()
@@ -25,20 +30,27 @@ final class InPlaceSession: OverlaySession {
     private var shown = false
     private var suspended = false
     private var transitioning = false
-    private var nextResumeAttempt = Date.distantPast
-    private var tick = 0
     private var ended = false
-    private var timer: Timer?
-    private var mouseMonitor: Any?
-    private var activationObserver: NSObjectProtocol?
+    private var nextResumeAttempt = Date.distantPast
+    private var tickCount = 0
     private var rebuilding = false
     private var syncing = false
     private var syncAgain = false
+    private var configuring = false
+    private var configAgain = false
+    private var lastHoles: [CGRect]?
+    private var streamFailures: [Date] = []
 
-    init(window: WindowInfo, alpha: Double, hub: BackdropHub) {
+    init(window: WindowInfo, alpha: Double, hub: BackdropHub, coordinator: StackCoordinator) {
         self.window = window
         self.alpha = alpha
         self.hub = hub
+        self.coordinator = coordinator
+    }
+
+    /// Window numbers of this session's panels (the coordinator uses them to tell our windows from other apps').
+    var panelNumbers: [UInt32] {
+        ([overlay?.windowNumber] + covers.map { Optional($0.windowNumber) }).compactMap { $0 }.map { UInt32($0) }
     }
 
     // MARK: lifecycle
@@ -49,7 +61,7 @@ final class InPlaceSession: OverlaySession {
         frame = state.bounds
         buildOverlay()
         sink.onStop = { [weak self] error in
-            Task { @MainActor in self?.end(error.map { .captureFailed($0.localizedDescription) }) }
+            Task { @MainActor in await self?.streamDied(error) }
         }
         sink.view = overlayView
         do { try await startWindowStream() } catch {
@@ -62,23 +74,7 @@ final class InPlaceSession: OverlaySession {
         for _ in 0..<40 where !(sink.frameCount > 0 && covers.allSatisfy(\.hasFrames)) { try? await Task.sleep(nanoseconds: 25_000_000) }
         guard sink.frameCount > 0 else { stop(); throw BackendError.captureFailed("no frames received") }
         showGroup()
-
-        // Common run-loop modes: the timer must keep running while a menu or slider is being tracked.
-        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.onTick() }
-        }
-        t.tolerance = 0
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
-        // A click makes the app raise the original above our panels. Re-stack immediately, and again a few times
-        // while the app finishes raising (the event reaches us before or at the same moment as the raise).
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .leftMouseUp, .otherMouseDown]) { [weak self] _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.restackBurst() } }
-        }
-        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.restackBurst() }
-        }
+        coordinator.register(self)
     }
 
     func update(alpha: Double, options: WindowOptions) {
@@ -98,11 +94,7 @@ final class InPlaceSession: OverlaySession {
     func stop() {
         guard !ended else { return }
         ended = true
-        timer?.invalidate()
-        if let m = mouseMonitor { NSEvent.removeMonitor(m) }
-        mouseMonitor = nil
-        if let o = activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
-        activationObserver = nil
+        coordinator.unregister(self)
         if let s = stream { Task { try? await s.stopCapture() } }
         stream = nil
         covers.forEach { $0.stop() }
@@ -116,31 +108,56 @@ final class InPlaceSession: OverlaySession {
         onEnded?(window.id, error)
     }
 
-    // MARK: tracking
+    // MARK: per-frame work (called by the coordinator)
 
-    private func onTick() {
+    func tick(_ snap: WindowGeometry.Snapshot, ours: Set<UInt32>) {
         guard !ended, !transitioning else { return }
-        tick += 1
-        if suspended, tick % 10 != 0 { return } // 6 Hz is plenty while the window is hidden
-        guard let state = WindowGeometry.state(of: window.id.number) else { end(nil); return }
-        if !state.onScreen { // minimized, other Space, hidden app: stop all captures until it is back
-            if !suspended { Task { await suspend() } }
+        tickCount += 1
+        guard let i = snap.index[window.id.number] else {
+            // Not on screen: minimized, hidden app, another Space, or closed. The full-list lookup is slower, so
+            // while suspended it runs at 6 Hz.
+            if !suspended {
+                if WindowGeometry.state(of: window.id.number) == nil { end(nil) } else { Task { await suspend() } }
+            } else if tickCount % 10 == 0, WindowGeometry.state(of: window.id.number) == nil {
+                end(nil)
+            }
             return
         }
+        let entry = snap.entries[i]
         if suspended {
-            frame = state.bounds
+            frame = entry.bounds
             Task { await resume() }
             return
         }
-        if state.bounds != frame {
-            frame = state.bounds
+        if entry.bounds != frame {
+            frame = entry.bounds
             overlay.setFrame(ScreenGeometry.appKitFrame(fromCG: frame), display: false)
             overlayView.frame = NSRect(origin: .zero, size: frame.size)
-            if let stream { Task { try? await stream.updateConfiguration(windowConfiguration()) } }
+            lastHoles = nil
+            scheduleWindowConfig()
             scheduleSync()
         }
-        restackIfNeeded()
+        updateHoles(snap, index: i, ours: ours)
+        if shown, !overlay.isVisible { showGroup() } // something hid the panels: put them back
     }
+
+    /// Windows stacked above the original must stay visible, so cut them out of the panels.
+    private func updateHoles(_ snap: WindowGeometry.Snapshot, index: Int, ours: Set<UInt32>) {
+        var holes: [CGRect] = []
+        for e in snap.entries[0..<index] {
+            // Floating level is 3: anything above that already sits above our panels by itself.
+            guard e.layer <= 3, e.alpha > 0.01, !ours.contains(e.number), e.bounds.intersects(frame) else { continue }
+            // Tiny windows of the app itself are its own chrome (e.g. the traffic lights), not something to cut out.
+            if e.pid == window.id.pid, e.bounds.width * e.bounds.height < 4000 || e.bounds.height < 30 { continue }
+            holes.append(e.bounds.intersection(frame))
+        }
+        guard holes != lastHoles else { return }
+        lastHoles = holes
+        HoleMask.apply(to: overlayView.layer, rect: frame, holes: holes)
+        covers.forEach { $0.setHoles(holes) }
+    }
+
+    // MARK: suspend / resume / recovery
 
     private func suspend() async {
         guard !suspended, !transitioning, !ended else { return }
@@ -169,30 +186,24 @@ final class InPlaceSession: OverlaySession {
         guard started, !ended else { nextResumeAttempt = Date().addingTimeInterval(1); return }
         await rebuildCovers()
         for _ in 0..<20 where !(sink.frameCount > 0 && covers.allSatisfy(\.hasFrames)) { try? await Task.sleep(nanoseconds: 25_000_000) }
+        lastHoles = nil
         suspended = false
         showGroup()
     }
 
-    /// Stack, front to back: overlay, backdrops, original, with nothing in between. Anything else means the original
-    /// was raised (or another window slipped in), so put our panels back directly above it.
-    private func restackIfNeeded() {
-        guard !ended, shown, let overlay else { return }
-        let above = WindowGeometry.windowsAbove(window.id.number)
-        let ours = Set(covers.map { UInt32($0.windowNumber) })
-        let n = covers.count + 1
-        if above.count >= n, above[0] == UInt32(overlay.windowNumber), Set(above[1..<n]) == ours { return }
-        covers.forEach { $0.order(above: Int(window.id.number)) }
-        overlay.order(.above, relativeTo: covers.last?.windowNumber ?? Int(window.id.number))
-    }
-
-    /// Checks now and at the next few frames.
-    private func restackBurst() {
-        restackIfNeeded()
-        for ms in [4, 8, 16, 33, 66, 120] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(ms)) { [weak self] in
-                MainActor.assumeIsolated { self?.restackIfNeeded() }
-            }
+    /// The capture stopped on its own (display change, sleep, window server reset). Restart it instead of giving up,
+    /// and give up only if it keeps dying.
+    private func streamDied(_ error: Error?) async {
+        guard !ended, !suspended, !transitioning else { return }
+        let now = Date()
+        streamFailures = streamFailures.filter { now.timeIntervalSince($0) < 60 } + [now]
+        if streamFailures.count > 6 {
+            end(.captureFailed(error?.localizedDescription ?? "capture keeps stopping"))
+            return
         }
+        stream = nil
+        await suspend()
+        nextResumeAttempt = Date().addingTimeInterval(0.5)
     }
 
     // MARK: layers
@@ -219,9 +230,10 @@ final class InPlaceSession: OverlaySession {
         covers.forEach { $0.stop() }
         covers.removeAll()
         for rect in BackdropCover.visibleRects(origin: frame.origin, size: frame.size) {
-            let c = BackdropCover(rect: rect, originalID: window.id.number, hub: hub)
+            let c = BackdropCover(rect: rect, originalID: window.id.number, hub: hub, floating: true)
             do { try await c.start(); covers.append(c) } catch { c.stop() }
         }
+        lastHoles = nil
     }
 
     /// Coalesces backdrop updates while the window is being dragged or resized.
@@ -245,15 +257,28 @@ final class InPlaceSession: OverlaySession {
             await rebuildCovers()
             if shown { showGroup() }
         }
+        lastHoles = nil
     }
 
+    /// Same for the window capture's size.
+    private func scheduleWindowConfig() {
+        if configuring { configAgain = true; return }
+        configuring = true
+        Task { @MainActor in
+            repeat {
+                configAgain = false
+                try? await stream?.updateConfiguration(windowConfiguration())
+            } while configAgain && !ended
+            configuring = false
+        }
+    }
+
+    /// Orders the panels in: backdrops first, overlay on top (both at the floating level).
     private func showGroup() {
-        guard !ended else { return }
+        guard !ended, let overlay else { return }
         shown = true
         covers.forEach { $0.setVisible(true) }
         overlay.orderFrontRegardless()
-        covers.forEach { $0.order(above: Int(window.id.number)) }
-        overlay.order(.above, relativeTo: covers.last?.windowNumber ?? Int(window.id.number))
     }
 
     private func hideGroup() {
@@ -270,6 +295,9 @@ final class InPlaceSession: OverlaySession {
         p.hasShadow = false
         p.ignoresMouseEvents = true // real input goes to the original underneath
         p.isReleasedWhenClosed = false
+        p.hidesOnDeactivate = false
+        p.canHide = false
+        p.level = .floating
         p.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
         p.alphaValue = alpha
         let v = NSView(frame: NSRect(origin: .zero, size: frame.size))

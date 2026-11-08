@@ -229,6 +229,8 @@ final class MirrorSession: OverlaySession {
         p.backgroundColor = .clear
         p.hasShadow = false
         p.isReleasedWhenClosed = false
+        p.hidesOnDeactivate = false
+        p.canHide = false
         p.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
         p.becomesKeyOnlyIfNeeded = true
         p.acceptsMouseMovedEvents = true

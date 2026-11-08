@@ -15,7 +15,10 @@ final class BackdropCover {
     private unowned let hub: BackdropHub
     private(set) var hasFrames = false
 
-    init(rect: CGRect, originalID: UInt32, hub: BackdropHub) {
+    private let floating: Bool
+
+    init(rect: CGRect, originalID: UInt32, hub: BackdropHub, floating: Bool = false) {
+        self.floating = floating
         self.rect = rect
         self.originalID = originalID
         self.hub = hub
@@ -26,6 +29,9 @@ final class BackdropCover {
         p.hasShadow = false
         p.ignoresMouseEvents = true
         p.isReleasedWhenClosed = false
+        p.hidesOnDeactivate = false
+        p.canHide = false
+        p.level = floating ? .floating : .normal
         p.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
         let v = NSView(frame: NSRect(origin: .zero, size: rect.size))
         v.wantsLayer = true
@@ -40,7 +46,7 @@ final class BackdropCover {
 
     func start() async throws {
         panel.orderFrontRegardless()
-        panel.order(.above, relativeTo: Int(originalID))
+        if !floating { panel.order(.above, relativeTo: Int(originalID)) }
         do { try await hub.attach(self) } catch {
             panel.orderOut(nil)
             panel.close()
@@ -57,6 +63,7 @@ final class BackdropCover {
         return true
     }
 
+    func setHoles(_ holes: [CGRect]) { HoleMask.apply(to: view.layer, rect: rect, holes: holes) }
     func order(above windowNumber: Int) { panel.order(.above, relativeTo: windowNumber) }
     func setVisible(_ visible: Bool) { visible ? panel.orderFrontRegardless() : panel.orderOut(nil) }
 

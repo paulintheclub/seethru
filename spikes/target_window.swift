@@ -42,6 +42,14 @@ if CommandLine.arguments.contains("--blink") {
         if visible { win.orderFront(nil) } else { win.orderOut(nil) }
     }
 }
+if CommandLine.arguments.contains("--blue") { v.layer?.backgroundColor = NSColor.systemBlue.cgColor }
+if CommandLine.arguments.contains("--raise") {
+    // like a click on the window: the app raises and activates its own window
+    Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+        win.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
 win.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps: true)
 print("pid=\(getpid()) window=\(win.windowNumber)")
