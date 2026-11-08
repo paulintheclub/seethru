@@ -5,8 +5,7 @@
 A small, open-source menu bar app for macOS that makes **any app's windows see-through**, with a slider per app or
 per window, global hotkeys, and per-app memory. Everything runs on your Mac: no network, no telemetry, no accounts.
 
-> Status: v0.1, early. Capture and overlay are verified on macOS 26; the full "hide the original" path still needs
-> confirmation on more setups (see [docs/FEASIBILITY.md](docs/FEASIBILITY.md)). Read the limitations below.
+> Status: v0.2. Tested on macOS 26 (Apple Silicon), mainly with Chrome; docs/QA.md lists what is not verified yet.
 
 ## What it does
 

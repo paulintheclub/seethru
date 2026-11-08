@@ -70,7 +70,6 @@ p.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 p.arguments = ["-c", "icns", iconset, "-o", "Resources/AppIcon.icns"]
 try p.run(); p.waitUntilExit()
 try? fm.removeItem(atPath: iconset)
-try png(size: 1024).write(to: URL(fileURLWithPath: "docs/logo.png"))
 
 func svgRect(_ r: Rect, _ radius: Double, _ extra: String) -> String {
     "<rect x=\"\(r.x)\" y=\"\(r.y)\" width=\"\(r.w)\" height=\"\(r.h)\" rx=\"\(radius)\" \(extra)/>"

@@ -25,7 +25,7 @@ The read-back is a strong programmatic signal, but the visual check on a real ap
 doing: `.build/SpikeA "Google Chrome" 0.5 5` and watch the window.
 
 **Verdict: Spike A fails with SIP on. SkyLight cannot be the primary backend.**
-The `SkyLightBackend` in the app is kept as an opt-in probe that verifies via read-back and reports failure honestly.
+A SkyLight backend was tried in the app and removed again; the spike remains as the evidence.
 
 ## Spike B — Mirror overlay (SIP on)
 

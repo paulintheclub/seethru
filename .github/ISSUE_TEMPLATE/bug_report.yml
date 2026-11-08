@@ -10,8 +10,8 @@ body:
     attributes: { label: Chip, placeholder: "Apple M2 / Intel" }
     validations: { required: true }
   - type: dropdown
-    id: backend
-    attributes: { label: Backend, options: [Mirror, SkyLight] }
+    id: mode
+    attributes: { label: Mode, options: [Normal transparency, Click-through, Always on top] }
   - type: input
     id: app
     attributes: { label: App whose window is affected, placeholder: "Safari 19" }

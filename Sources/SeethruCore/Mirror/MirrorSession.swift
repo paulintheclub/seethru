@@ -30,7 +30,6 @@ final class MirrorSession: OverlaySession {
     private var timer: Timer?
     private var tickCount = 0
     private var ended = false
-    private var scWindow: SCWindow?
     private var covers: [BackdropCover] = []
     private var refreshingCovers = false
 
@@ -59,7 +58,6 @@ final class MirrorSession: OverlaySession {
         do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) }
         catch { throw BackendError.captureFailed(error.localizedDescription) }
         guard let scWindow = content.windows.first(where: { $0.windowID == window.id.number }) else { throw BackendError.windowNotFound }
-        self.scWindow = scWindow
 
         buildPanel()
         let s = SCStream(filter: SCContentFilter(desktopIndependentWindow: scWindow), configuration: configuration(), delegate: sink)
