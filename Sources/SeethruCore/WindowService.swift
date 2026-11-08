@@ -28,7 +28,8 @@ public struct CGWindowService: WindowListing {
     }
 
     public func windowExists(_ id: WindowID) -> Bool {
-        let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(id.number)) as? [[String: Any]] ?? []
+        // Hidden and minimized windows are missing from the on-screen list but still exist.
+        let rows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
         return rows.contains { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == id.number }
     }
 }

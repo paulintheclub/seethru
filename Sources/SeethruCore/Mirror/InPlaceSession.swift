@@ -25,6 +25,8 @@ final class InPlaceSession: OverlaySession {
     private var shown = false
     private var suspended = false
     private var transitioning = false
+    private var nextResumeAttempt = Date.distantPast
+    private var tick = 0
     private var ended = false
     private var timer: Timer?
     private var mouseMonitor: Any?
@@ -118,6 +120,8 @@ final class InPlaceSession: OverlaySession {
 
     private func onTick() {
         guard !ended, !transitioning else { return }
+        tick += 1
+        if suspended, tick % 10 != 0 { return } // 6 Hz is plenty while the window is hidden
         guard let state = WindowGeometry.state(of: window.id.number) else { end(nil); return }
         if !state.onScreen { // minimized, other Space, hidden app: stop all captures until it is back
             if !suspended { Task { await suspend() } }
@@ -150,21 +154,23 @@ final class InPlaceSession: OverlaySession {
         transitioning = false
     }
 
+    /// ScreenCaptureKit may not know a window yet in the first moments after it reappears, so retry for a while.
+    /// If it still fails, stay suspended and try again later; the session ends only when the window is really gone.
     private func resume() async {
-        guard suspended, !transitioning, !ended else { return }
+        guard suspended, !transitioning, !ended, Date() >= nextResumeAttempt else { return }
         transitioning = true
+        defer { transitioning = false }
         overlay.setFrame(ScreenGeometry.appKitFrame(fromCG: frame), display: false)
         overlayView.frame = NSRect(origin: .zero, size: frame.size)
-        do { try await startWindowStream() } catch {
-            transitioning = false
-            end(error as? BackendError ?? .captureFailed(error.localizedDescription))
-            return
+        var started = false
+        for _ in 0..<15 where !started && !ended {
+            do { try await startWindowStream(); started = true } catch { try? await Task.sleep(nanoseconds: 100_000_000) }
         }
+        guard started, !ended else { nextResumeAttempt = Date().addingTimeInterval(1); return }
         await rebuildCovers()
         for _ in 0..<20 where !(sink.frameCount > 0 && covers.allSatisfy(\.hasFrames)) { try? await Task.sleep(nanoseconds: 25_000_000) }
         suspended = false
         showGroup()
-        transitioning = false
     }
 
     /// Stack, front to back: overlay, backdrops, original, with nothing in between. Anything else means the original

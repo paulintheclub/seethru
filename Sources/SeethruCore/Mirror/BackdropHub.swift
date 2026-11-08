@@ -63,13 +63,10 @@ private final class DisplayBackdrop {
     init(displayID: CGDirectDisplayID, hub: BackdropHub) {
         self.displayID = displayID
         self.hub = hub
-        sink.onFrame = { [weak self] surface in
-            nonisolated(unsafe) let s = surface
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.deliver(s) } }
-        }
+        sink.target = self
     }
 
-    private func deliver(_ surface: IOSurface) {
+    fileprivate func deliver(_ surface: IOSurface) {
         for c in covers { c.deliver(surface, captureRect: captureRect) }
     }
 
@@ -102,7 +99,7 @@ private final class DisplayBackdrop {
     }
 
     func stop() {
-        sink.onFrame = nil
+        sink.target = nil
         if let s = stream { Task { try? await s.stopCapture() } }
         stream = nil
     }
@@ -142,11 +139,18 @@ private final class DisplayBackdrop {
     }
 }
 
+/// Receives frames on the capture queue and hands them to the main thread. Holds its target weakly in a plain class
+/// (no closures stored in a generic lock, which produced runaway reabstraction thunks and a stack overflow).
 private final class BackdropSink: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
-    private let handler = OSAllocatedUnfairLock<(@Sendable (IOSurface) -> Void)?>(initialState: nil)
-    var onFrame: (@Sendable (IOSurface) -> Void)? {
-        get { handler.withLock { $0 } }
-        set { handler.withLock { $0 = newValue } }
+    private final class Weak: @unchecked Sendable {
+        weak var value: DisplayBackdrop?
+        init(_ v: DisplayBackdrop?) { value = v }
+    }
+    private let box = OSAllocatedUnfairLock<Weak>(initialState: Weak(nil))
+
+    @MainActor var target: DisplayBackdrop? {
+        get { box.withLock { $0.value } }
+        set { box.withLock { $0 = Weak(newValue) } }
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sb: CMSampleBuffer, of type: SCStreamOutputType) {
@@ -155,6 +159,8 @@ private final class BackdropSink: NSObject, SCStreamOutput, SCStreamDelegate, @u
               let status = attachments.first?[.status] as? Int, status == SCFrameStatus.complete.rawValue,
               let pixelBuffer = CMSampleBufferGetImageBuffer(sb),
               let surface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue() else { return }
-        onFrame?(surface)
+        let weakTarget = box.withLock { $0 }
+        nonisolated(unsafe) let s = surface
+        DispatchQueue.main.async { MainActor.assumeIsolated { weakTarget.value?.deliver(s) } }
     }
 }

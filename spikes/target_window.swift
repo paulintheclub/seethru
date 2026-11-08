@@ -27,6 +27,21 @@ if CommandLine.arguments.contains("--animate") {
         v.layer?.backgroundColor = NSColor(hue: phase.truncatingRemainder(dividingBy: 1), saturation: 0.8, brightness: 0.9, alpha: 1).cgColor
     }
 }
+if CommandLine.arguments.contains("--wander") {
+    var t = 0.0
+    Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { _ in
+        t += 0.03
+        let w = 420 + 120 * sin(t * 0.7), h = 260 + 80 * cos(t * 0.5)
+        win.setFrame(NSRect(x: originX + 200 * sin(t), y: 300 + 100 * cos(t * 0.8), width: w, height: h), display: true)
+    }
+}
+if CommandLine.arguments.contains("--blink") {
+    var visible = true
+    Timer.scheduledTimer(withTimeInterval: 6, repeats: true) { _ in
+        visible.toggle()
+        if visible { win.orderFront(nil) } else { win.orderOut(nil) }
+    }
+}
 win.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps: true)
 print("pid=\(getpid()) window=\(win.windowNumber)")

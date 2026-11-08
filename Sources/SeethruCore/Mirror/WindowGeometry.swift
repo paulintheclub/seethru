@@ -8,8 +8,15 @@ enum WindowGeometry {
     }
 
     /// Current frame (CG coordinates) and on-screen flag, or nil when the window no longer exists.
+    /// A hidden or minimized window is not in the on-screen list but still exists, so fall back to the full list
+    /// before concluding that it is gone.
     static func state(of number: UInt32) -> State? {
-        let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(number)) as? [[String: Any]] ?? []
+        if let s = parse(CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(number)), number) { return s }
+        return parse(CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID), number)
+    }
+
+    private static func parse(_ list: CFArray?, _ number: UInt32) -> State? {
+        let rows = list as? [[String: Any]] ?? []
         guard let row = rows.first(where: { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == number }),
               let dict = row[kCGWindowBounds as String] as? NSDictionary,
               let bounds = CGRect(dictionaryRepresentation: dict) else { return nil }
