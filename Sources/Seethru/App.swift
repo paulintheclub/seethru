@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signalSources: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if handOverToRunningInstance() { return }
         model.start()
         applyLaunchArguments()
         // Never leave a window transparent or parked off-screen when we are asked to stop.
@@ -58,6 +59,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             src.resume()
             signalSources.append(src)
         }
+    }
+
+    /// Two copies would stack two sets of panels on every window (and one would restore windows the other still
+    /// owns). If another copy is already running, show it and quit this one before touching anything.
+    private func handOverToRunningInstance() -> Bool {
+        guard let id = Bundle.main.bundleIdentifier else { return false }
+        let me = ProcessInfo.processInfo.processIdentifier
+        guard let other = NSRunningApplication.runningApplications(withBundleIdentifier: id)
+            .first(where: { $0.processIdentifier != me && !$0.isTerminated }) else { return false }
+        other.activate()
+        exit(0)
     }
 
     /// Developer/QA hook: `Seethru --set-opacity "<app name>" 0.5` dims that app's windows shortly after launch.

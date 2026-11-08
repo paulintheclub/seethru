@@ -20,14 +20,26 @@ public struct HotKeyBinding: Equatable, Sendable {
     public var keyCode: UInt32
     public var modifiers: UInt32
     public var display: String
+    /// Extra spelling of the same shortcut (the numpad has its own keys). Not shown in Settings.
+    public var isAlias = false
 
-    /// ⌃⌥⌘ + key. Carbon hotkeys need no extra permission.
+    /// ⌘⇧ + key. Carbon hotkeys need no extra permission. "+" is Shift and the "=" key, so no extra Shift is needed.
     public static let defaults: [HotKeyBinding] = {
-        let mods = UInt32(controlKey | optionKey | cmdKey)
+        let mods = UInt32(cmdKey | shiftKey)
         return [
-            HotKeyBinding(action: .moreOpaque, keyCode: UInt32(kVK_UpArrow), modifiers: mods, display: "⌃⌥⌘↑"),
-            HotKeyBinding(action: .moreTransparent, keyCode: UInt32(kVK_DownArrow), modifiers: mods, display: "⌃⌥⌘↓"),
-            HotKeyBinding(action: .reset, keyCode: UInt32(kVK_ANSI_0), modifiers: mods, display: "⌃⌥⌘0"),
+            HotKeyBinding(action: .moreOpaque, keyCode: UInt32(kVK_ANSI_Equal), modifiers: mods, display: "⌘⇧+"),
+            HotKeyBinding(action: .moreTransparent, keyCode: UInt32(kVK_ANSI_Minus), modifiers: mods, display: "⌘⇧-"),
+            HotKeyBinding(action: .reset, keyCode: UInt32(kVK_ANSI_0), modifiers: mods, display: "⌘⇧0"),
+        ]
+    }()
+
+    /// The same shortcuts on the numpad keys. Not shown in Settings.
+    public static let aliases: [HotKeyBinding] = {
+        let mods = UInt32(cmdKey | shiftKey)
+        return [
+            HotKeyBinding(action: .moreOpaque, keyCode: UInt32(kVK_ANSI_KeypadPlus), modifiers: mods, display: "⌘⇧ numpad +", isAlias: true),
+            HotKeyBinding(action: .moreTransparent, keyCode: UInt32(kVK_ANSI_KeypadMinus), modifiers: mods, display: "⌘⇧ numpad -", isAlias: true),
+            HotKeyBinding(action: .reset, keyCode: UInt32(kVK_ANSI_Keypad0), modifiers: mods, display: "⌘⇧ numpad 0", isAlias: true),
         ]
     }()
 }
@@ -37,22 +49,26 @@ public final class HotKeyCenter {
     public static let shared = HotKeyCenter()
     private var refs: [EventHotKeyRef] = []
     private var handler: (@MainActor (HotKeyAction) -> Void)?
+    private var actionsByID: [UInt32: HotKeyAction] = [:]
     private var installed: EventHandlerRef?
     private static let signature: OSType = 0x5345_4554 // 'SEET'
 
     /// Returns the actions whose key combo could not be registered (already taken by another app).
     @discardableResult
-    public func register(_ bindings: [HotKeyBinding] = HotKeyBinding.defaults,
+    public func register(_ bindings: [HotKeyBinding] = HotKeyBinding.defaults + HotKeyBinding.aliases,
                          handler: @escaping @MainActor (HotKeyAction) -> Void) -> [HotKeyAction] {
         unregisterAll()
         self.handler = handler
         installHandlerIfNeeded()
         var failed: [HotKeyAction] = []
-        for b in bindings {
+        actionsByID = [:]
+        for (index, b) in bindings.enumerated() {
             var ref: EventHotKeyRef?
-            let id = EventHotKeyID(signature: Self.signature, id: b.action.rawValue)
+            let number = UInt32(index + 1)
+            actionsByID[number] = b.action
+            let id = EventHotKeyID(signature: Self.signature, id: number)
             let status = RegisterEventHotKey(b.keyCode, b.modifiers, id, GetApplicationEventTarget(), 0, &ref)
-            if status == noErr, let ref { refs.append(ref) } else { failed.append(b.action) }
+            if status == noErr, let ref { refs.append(ref) } else if !b.isAlias { failed.append(b.action) }
         }
         return failed
     }
@@ -69,8 +85,14 @@ public final class HotKeyCenter {
             var hk = EventHotKeyID()
             let s = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                                       nil, MemoryLayout<EventHotKeyID>.size, nil, &hk)
-            guard s == noErr, hk.signature == 0x5345_4554, let action = HotKeyAction(rawValue: hk.id) else { return OSStatus(eventNotHandledErr) }
-            DispatchQueue.main.async { MainActor.assumeIsolated { HotKeyCenter.shared.handler?(action) } }
+            guard s == noErr, hk.signature == 0x5345_4554 else { return OSStatus(eventNotHandledErr) }
+            let number = hk.id
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let center = HotKeyCenter.shared
+                    if let action = center.actionsByID[number] { center.handler?(action) }
+                }
+            }
             return noErr
         }, 1, &spec, nil, &installed)
     }
