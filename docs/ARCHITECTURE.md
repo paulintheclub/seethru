@@ -6,7 +6,7 @@ Sources/
   SeethruCore/   engine: window listing, backends, rules, hotkeys, AppModel (no SwiftUI)
   Seethru/       menu bar app: MenuBarExtra, settings, onboarding
 Tests/SeethruCoreTests/
-spikes/          standalone feasibility programs (see FEASIBILITY.md)
+tools/           test_window.swift: a throwaway window for stress-testing
 ```
 
 ## Flow
@@ -30,7 +30,6 @@ spikes/          standalone feasibility programs (see FEASIBILITY.md)
 | Permissions | both are required at first launch; the app is gated until granted | same |
 | If Seethru dies | nothing to restore | `hidden-windows.json` journal moves windows back on next launch |
 
-A direct SkyLight alpha backend was tried and removed: macOS ignores it for other apps' windows with SIP on (docs/FEASIBILITY.md).
 
 In-place details (`Mirror/InPlaceSession.swift`, `Mirror/BackdropCover.swift`, `Mirror/BackdropHub.swift`):
 

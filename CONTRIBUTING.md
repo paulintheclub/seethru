@@ -13,5 +13,5 @@ macOS permissions follow the app's code signature. Sign development builds with 
 
 Developer launch flags (handy for QA): `Seethru --show-window` opens the main window at launch (useful when the menu bar is
 crowded); `Seethru --set-opacity "<app name>" 0.5` dims that app's windows shortly after launch. The throwaway windows in
-`spikes/target_window.swift` (`--animate`, `--wander`, `--blink`, `--raise`, `--blue`, `--x N`) are for stress-testing without
+`tools/test_window.swift` (`--animate`, `--wander`, `--blink`, `--raise`, `--blue`, `--x N`) are for stress-testing without
 touching your own windows.

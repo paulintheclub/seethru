@@ -1,5 +1,6 @@
-// Throwaway "foreign" window used as a control target for the spikes.
-// Build: swiftc -O spikes/target_window.swift -o .build/SpikeTarget
+// Throwaway window for stress-testing Seethru without touching your own windows.
+// Build: swiftc -O -swift-version 5 tools/test_window.swift -o .build/SpikeTarget
+// Run it, then: Seethru --set-opacity SpikeTarget 0.5
 import AppKit
 
 let app = NSApplication.shared
